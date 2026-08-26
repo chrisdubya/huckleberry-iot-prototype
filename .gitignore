@@ -1,0 +1,14 @@
+# Credentials — never commit
+.env
+
+# Runtime state
+*.state.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+dist/
+
+# OS
+.DS_Store

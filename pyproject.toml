@@ -1,0 +1,21 @@
+[project]
+name = "huckdeck"
+version = "0.1.0"
+description = "Stream-deck-style button device that logs baby events to Huckleberry"
+readme = "README.md"
+authors = [
+    { name = "Chris Williams", email = "chriscancodethat@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "huckleberry-api>=0.4.3",
+    "python-dotenv>=1.2.3",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+huckdeck = "huckdeck.main:run"
+
+[build-system]
+requires = ["uv_build>=0.12.6,<0.13.0"]
+build-backend = "uv_build"

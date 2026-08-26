@@ -1,0 +1,28 @@
+# huckdeck configuration
+
+# Optional: pin a specific child by cid. Leave blank to use the first child
+# on the account (a warning is printed if there is more than one).
+child_uid: ""
+
+# Defaults applied when the bottle button is pressed.
+bottle:
+  amount: 120
+  units: ml            # ml or oz
+  type: Formula        # Formula, Breast Milk, Cow Milk, ...
+
+# Which side a nursing session starts on: left or right.
+nursing:
+  start_side: left
+
+# Ignore a repeat press of the same button within this many seconds.
+debounce_seconds: 2
+
+# Input key -> event. Events: pee, poo, both, bottle, sleep_toggle, nursing_toggle.
+# On the Pi this same mapping will point GPIO pins at events instead of keys.
+buttons:
+  "1": pee
+  "2": poo
+  "3": both
+  "4": bottle
+  "5": sleep_toggle
+  "6": nursing_toggle
