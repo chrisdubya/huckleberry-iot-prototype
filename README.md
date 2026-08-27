@@ -44,10 +44,20 @@ Events are timestamped at the moment of the press and sent in the background
 with retries, so a WiFi hiccup doesn't lose or re-time anything. Sleep and
 nursing toggle state survives restarts (`~/.huckdeck.state.json`).
 
-## Hardware roadmap
+## Physical device (Raspberry Pi Zero 2 W)
 
-- **Raspberry Pi Zero 2 W** running this same package; `huckleberry-api` is on
-  [piwheels](https://www.piwheels.org/project/huckleberry-api/).
-- `src/huckdeck/inputs/gpio.py` (gpiozero buttons) as a drop-in replacement for
-  the keyboard input — the dispatcher/client layers don't change.
-- 3D-printed case, six mechanical switches, per-button status LED.
+The same package runs on the Pi with six 24mm arcade buttons and an RGB
+status LED (green flash = logged, red = retrying, dim blue = sleep/nursing
+session in progress):
+
+- Parts list and wiring: [docs/hardware.md](docs/hardware.md)
+- Flash + provision + systemd service: [docs/pi-setup.md](docs/pi-setup.md)
+- 3D-printable case: [case/huckdeck_case.scad](case/huckdeck_case.scad)
+  (parametric OpenSCAD; pre-rendered STLs alongside)
+
+On the Pi it runs `huckdeck --input gpio` via the systemd unit in
+[deploy/](deploy/). To test the GPIO layer without hardware:
+
+```sh
+uv run --extra pi python -m huckdeck.dev_mocktest
+```

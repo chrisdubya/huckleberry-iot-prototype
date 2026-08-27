@@ -20,7 +20,12 @@ async def run(dispatcher: Dispatcher, buttons: dict[str, str]) -> None:
     """Read keys until quit. `buttons` maps key -> event name."""
     loop = asyncio.get_running_loop()
     fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    try:
+        old_settings = termios.tcgetattr(fd)
+    except termios.error as exc:
+        raise RuntimeError(
+            "keyboard input needs an interactive terminal (or use --input gpio on the Pi)"
+        ) from exc
     tty.setcbreak(fd)
     try:
         while True:

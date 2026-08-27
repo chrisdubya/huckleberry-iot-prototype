@@ -1,0 +1,18 @@
+[Unit]
+Description=huckdeck — Huckleberry button deck
+Wants=network-online.target
+After=network-online.target
+# Auth needs the network; let slow WiFi cause a few restarts without giving up.
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/huckleberry-iot-prototype
+ExecStart=/home/pi/.local/bin/uv run --extra pi huckdeck --input gpio
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
