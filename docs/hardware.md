@@ -10,8 +10,9 @@
 | 6× 24mm arcade buttons | Two colors: e.g. yellow/brown for diapers, white/blue for feed & sleep | $9 |
 | 5mm diffused **common-cathode** RGB LED | + 3× 330Ω resistors | $2 |
 | Female-female Dupont jumpers (20cm) | Only the F-F ones are used; cut off-center and solder the bare end | $5 |
-| M2.5 screw assortment (6–12mm) | ~6mm for the Pi posts, 10–12mm for the case corners | $7 |
-| Optional: M2.5 heat-set inserts | Screws self-tap into the printed bosses fine without them; inserts install with a soldering iron | $4 |
+| 4× M3×12 screws (button or cap head) | Case corners — holes are sized for M3; any M3 assortment works | $0–7 |
+| Optional: 4× M2.5 screws ~6mm | Bolting the Pi to its posts (Pi holes are 2.75mm, M3 won't fit); foam tape or hot glue works instead | — |
+| Optional: M3 heat-set inserts | Corner screws self-tap into the printed bosses fine without them; if used, set `case_pilot_d` to the insert OD (~4.6) and install with a soldering iron | $4 |
 
 Tools: soldering iron + rosin-core solder, wire stripper/cutter rated down to
 28AWG, small Phillips screwdriver, heat-shrink tubing, optionally a multimeter
