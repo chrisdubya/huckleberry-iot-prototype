@@ -31,6 +31,11 @@ corner_r        = 6;
 pi_l = 65; pi_w = 30;
 pi_hole_dx = 58; pi_hole_dy = 23;  // mounting hole pattern
 pi_post_h = 5;
+// power-port slot in the rear wall; test-fit against the real board and
+// mirror usb_slot_x if the ports land on the other side
+usb_slot_x = -15;
+usb_slot_w = 26;
+usb_slot_h = 9;
 
 /* ---- derived ---- */
 inner_x = (cols - 1) * button_pitch + 2 * margin;
@@ -99,13 +104,14 @@ module base() {
         rounded_box(outer_x, outer_y, base_h, corner_r);
         translate([0, 0, wall])
             rounded_box(inner_x, inner_y, base_h, corner_r - wall);
-        // micro-USB power cutout, rear wall, near the Pi
-        translate([-outer_x / 2 - 1, -pi_w / 2 - 8, wall + pi_post_h])
-            cube([wall + 2, 12, 8]);
+        // micro-USB power slot through the rear wall (overmold passes through)
+        translate([usb_slot_x - usb_slot_w / 2, outer_y / 2 - wall - 1, wall + pi_post_h - 1])
+            cube([usb_slot_w, wall + 2, usb_slot_h]);
     }
-    // Pi sits along the rear wall, ports facing the cutout
-    translate([-inner_x / 2 + pi_w / 2 + 2, -inner_y / 2 + pi_l / 2 + 2, wall - 0.01])
-        rotate([0, 0, 90]) pi_posts();
+    // Pi centered along the rear wall (clear of the corner bosses),
+    // long edge with the ports 1mm from the wall, facing the slot
+    translate([0, inner_y / 2 - pi_w / 2 - 1, wall - 0.01])
+        pi_posts();
     // screw bosses (M2.5 self-tap)
     corner_screw_centers()
         translate([0, 0, wall - 0.01])

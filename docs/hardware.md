@@ -87,8 +87,11 @@ Parametric OpenSCAD, two printed parts:
 
 - **Top plate**: 2×3 grid of 24mm button holes (24.4mm default, tune
   `button_hole_d` to your printer), 5mm LED hole front-center.
-- **Base**: Pi Zero mounting posts (58×23mm, M2.5), side cutout for the
-  micro-USB power lead, screw bosses in the corners.
+- **Base**: Pi Zero mounting posts (58×23mm, M2.5) centered along the rear
+  wall, a rear slot the micro-USB power plug passes through, and M3 screw
+  bosses in the corners. Before printing, dry-fit the Pi against the rear
+  edge: if its power port doesn't line up with the slot, mirror
+  `usb_slot_x` in the .scad and re-render.
 
 Print: PLA or PETG, 0.2mm layers, no supports (top prints face-down).
 Adjust tolerances in the variables block, re-export STLs with:
