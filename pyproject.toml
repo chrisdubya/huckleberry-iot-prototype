@@ -13,6 +13,14 @@ dependencies = [
     "pyyaml>=6.0.3",
 ]
 
+[project.optional-dependencies]
+# Pi-only: on Raspberry Pi OS install apt packages python3-dev, swig,
+# liblgpio-dev first (lgpio builds from source), then `uv sync --extra pi`.
+pi = [
+    "gpiozero>=2.0.1.post3",
+    "lgpio>=0.2.2 ; sys_platform == 'linux'",
+]
+
 [project.scripts]
 huckdeck = "huckdeck.main:run"
 

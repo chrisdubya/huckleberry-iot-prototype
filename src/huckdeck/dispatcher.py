@@ -43,18 +43,24 @@ class Event:
     pressed_at: datetime
 
 
+# Status callback contract: on_event(status, action, detail).
+# status ∈ {"sending", "success", "retrying", "failed", "ignored"};
+# action is an EVENT_LABELS key ("" for ignored); detail is display text.
+StatusCallback = Callable[[str, str, str], None]
+
+
 class Dispatcher:
     def __init__(
         self,
         client: HuckClient,
         state_path: Path,
         debounce_seconds: float,
-        on_status: Callable[[str], None],
+        on_event: StatusCallback,
     ) -> None:
         self._client = client
         self._state_path = state_path
         self._debounce = debounce_seconds
-        self._on_status = on_status
+        self._on_event = on_event
         self._queue: asyncio.Queue[Event] = asyncio.Queue()
         self._last_press: dict[str, datetime] = {}
         self._state = self._load_state()
@@ -85,7 +91,7 @@ class Dispatcher:
         now = datetime.now()
         last = self._last_press.get(event_name)
         if last is not None and (now - last).total_seconds() < self._debounce:
-            self._on_status(f"(ignored double-press: {event_name})")
+            self._on_event("ignored", "", f"double-press: {event_name}")
             return
         self._last_press[event_name] = now
 
@@ -100,7 +106,7 @@ class Dispatcher:
         else:
             action = event_name
 
-        self._on_status(f"⏳ {EVENT_LABELS[action]} — sending…")
+        self._on_event("sending", action, EVENT_LABELS[action])
         self._queue.put_nowait(Event(action=action, pressed_at=now))
 
     # -- network side ---------------------------------------------------
@@ -124,16 +130,22 @@ class Dispatcher:
         for attempt in range(1, RETRIES + 1):
             try:
                 await self._send(event)
-                self._on_status(f"✓ {label} @ {stamp}")
+                self._on_event("success", event.action, f"{label} @ {stamp}")
                 return
             except Exception as exc:  # noqa: BLE001 — any network/API failure retries
                 if attempt < RETRIES:
                     delay = BACKOFF_BASE_SECONDS**attempt
-                    self._on_status(f"⚠ {label} failed ({exc}); retry {attempt}/{RETRIES - 1} in {delay}s")
+                    self._on_event(
+                        "retrying", event.action,
+                        f"{label} failed ({exc}); retry {attempt}/{RETRIES - 1} in {delay}s",
+                    )
                     await asyncio.sleep(delay)
                 else:
                     _LOGGER.exception("Giving up on %s pressed at %s", event.action, stamp)
-                    self._on_status(f"✗ {label} @ {stamp} LOST after {RETRIES} attempts: {exc}")
+                    self._on_event(
+                        "failed", event.action,
+                        f"{label} @ {stamp} LOST after {RETRIES} attempts: {exc}",
+                    )
 
     async def _send(self, event: Event) -> None:
         match event.action:

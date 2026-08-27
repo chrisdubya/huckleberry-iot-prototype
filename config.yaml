@@ -17,8 +17,11 @@ nursing:
 # Ignore a repeat press of the same button within this many seconds.
 debounce_seconds: 2
 
+# Input source: keyboard (terminal prototype) or gpio (Pi). The --input CLI
+# flag overrides this.
+input: keyboard
+
 # Input key -> event. Events: pee, poo, both, bottle, sleep_toggle, nursing_toggle.
-# On the Pi this same mapping will point GPIO pins at events instead of keys.
 buttons:
   "1": pee
   "2": poo
@@ -26,3 +29,17 @@ buttons:
   "4": bottle
   "5": sleep_toggle
   "6": nursing_toggle
+
+# Pi wiring (BCM pin numbers). Buttons wire to ground, internal pull-ups.
+gpio:
+  buttons:
+    "5": pee
+    "6": poo
+    "13": both
+    "19": bottle
+    "26": sleep_toggle
+    "16": nursing_toggle
+  led:            # 5mm common-cathode RGB LED via 330 ohm resistors
+    red: 17
+    green: 27
+    blue: 22
