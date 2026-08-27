@@ -9,9 +9,25 @@
 | 5V/2.5A PSU + micro-USB cable | Any solid 2.4A+ brick | $8 |
 | 6× 24mm arcade buttons | Two colors: e.g. yellow/brown for diapers, white/blue for feed & sleep | $9 |
 | 5mm diffused **common-cathode** RGB LED | + 3× 330Ω resistors | $2 |
-| Female-female Dupont jumpers (20cm) | | $5 |
-| 2.8mm (0.110") female spade connectors | 24mm arcade buttons take these; pre-crimped spade-to-Dupont leads exist | $5 |
-| Optional: M2.5 heat-set inserts + screws ×4 | Pi mounting; hot glue also works | $4 |
+| Female-female Dupont jumpers (20cm) | Only the F-F ones are used; cut off-center and solder the bare end | $5 |
+| M2.5 screw assortment (6–12mm) | ~6mm for the Pi posts, 10–12mm for the case corners | $7 |
+| Optional: M2.5 heat-set inserts | Screws self-tap into the printed bosses fine without them; inserts install with a soldering iron | $4 |
+
+Tools: soldering iron + rosin-core solder, wire stripper/cutter rated down to
+28AWG, small Phillips screwdriver, heat-shrink tubing, optionally a multimeter
+for continuity checks before closing the case.
+
+## Connections (solder at the parts, push-on at the Pi)
+
+Nothing is ever soldered to the Pi — every wire ends in a female Dupont
+socket pushed onto the pre-soldered header, so the board stays reusable.
+
+- **Buttons**: cut a female-female jumper off-center, strip the cut end, and
+  solder it to a microswitch tab (they have solder holes). Chain ground tabs
+  between neighboring buttons with short soldered bridges.
+- **LED**: solder a ~330Ω resistor inline at each color leg (resistor lead to
+  LED leg, other lead to a cut jumper), heat-shrink over the joint. The long
+  common-cathode leg gets a plain cut jumper to ground — no resistor.
 
 ## Wiring
 
