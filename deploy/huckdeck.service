@@ -9,6 +9,8 @@ StartLimitBurst=20
 [Service]
 Type=simple
 User=pi
+# stdout is block-buffered without a tty; unbuffer so prints reach the journal
+Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=/home/pi/huckleberry-iot-prototype
 ExecStart=/home/pi/.local/bin/uv run --extra pi huckdeck --input gpio
 Restart=always
