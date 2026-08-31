@@ -23,6 +23,16 @@ ssh pi@huckdeck.local
 curl -fsSL https://raw.githubusercontent.com/chrisdubya/huckleberry-iot-prototype/main/deploy/provision.sh | bash
 ```
 
+Two things to know:
+
+- **The repo must be public** for the curl and the clone to work — the Pi has
+  no GitHub credentials. (Alternative for a private fork: `rsync` the working
+  tree to `~/huckleberry-iot-prototype` on the Pi and run the script's steps
+  from there.)
+- **`sudo` prompts for your password** (current Pi OS images don't grant the
+  first user passwordless sudo), so run this at an interactive SSH prompt —
+  it can't run detached.
+
 The script installs apt prerequisites (`python3-dev swig liblgpio-dev` — the
 `lgpio` Python package builds from source on Trixie), installs `uv`, clones
 this repo, and runs `uv sync --extra pi`. It then stops and asks for `.env`.

@@ -7,51 +7,47 @@
 | Raspberry Pi Zero 2 **WH** | Pre-soldered header. Bare board ~$18 (PiShop.us, Adafruit) or an Amazon kit with genuine board + heatsink (~high $20s) | $18–30 |
 | microSD 32GB, A1-rated | SanDisk / Samsung | $8 |
 | 5V/2.5A PSU + micro-USB cable | Any solid 2.4A+ brick | $8 |
-| 6× 24mm arcade buttons | Two colors: e.g. yellow/brown for diapers, white/blue for feed & sleep | $9 |
-| 5mm diffused **common-cathode** RGB LED | + 3× 330Ω resistors | $2 |
-| Female-female Dupont jumpers (20cm) | Only the F-F ones are used; cut off-center and solder the bare end | $5 |
-| 4× M3×12 screws (button or cap head) | Case corners — holes are sized for M3; any M3 assortment works | $0–7 |
-| Optional: 4× M2.5 screws ~6mm | Bolting the Pi to its posts (Pi holes are 2.75mm, M3 won't fit); foam tape or hot glue works instead | — |
-| Optional: M3 heat-set inserts | Corner screws self-tap into the printed bosses fine without them; if used, set `case_pilot_d` to the insert OD (~4.6) and install with a soldering iron | $4 |
+| 6× 24mm arcade buttons | **Snap-in** Sanwa OBSF-24 clones (EG STARTS 12-pack). Two colors: e.g. yellow/brown for diapers, white/blue for feed & sleep | $9 |
+| 5mm diffused **common-cathode** RGB LED | + 3× resistors, 330–470Ω (as built: 430Ω 1/4W) | $2 |
+| Female-female Dupont jumpers (20cm) | Cut in half: female end presses onto the Pi header, cut end solders to the button | $5 |
+| Heat shrink tubing, 3/16" | Insulates the soldered joints and inline resistors | $3 |
+| Optional: M2.5 heat-set inserts + screws ×4 | Pi mounting; hot glue also works | $4 |
 
-Tools: soldering iron + rosin-core solder, wire stripper/cutter rated down to
-28AWG, small Phillips screwdriver, heat-shrink tubing, optionally a multimeter
-for continuity checks before closing the case.
-
-## Connections (solder at the parts, push-on at the Pi)
-
-Nothing is ever soldered to the Pi — every wire ends in a female Dupont
-socket pushed onto the pre-soldered header, so the board stays reusable.
-
-- **Buttons**: cut a female-female jumper off-center, strip the cut end, and
-  solder it to a microswitch tab (they have solder holes). Chain ground tabs
-  between neighboring buttons with short soldered bridges.
-- **LED**: solder a ~330Ω resistor inline at each color leg (resistor lead to
-  LED leg, other lead to a cut jumper), heat-shrink over the joint. The long
-  common-cathode leg gets a plain cut jumper to ground — no resistor.
+No spade connectors needed — the button lugs are soldered directly (see below).
 
 ## Wiring
 
-All buttons: one terminal to the GPIO pin, the other to any ground pin.
-Internal pull-ups are enabled in software — no resistors needed for buttons.
+Each button lead is half of a female-female Dupont jumper: the female end
+presses onto a header pin, the cut end is stripped, threaded through the hole
+in the button's blade lug, hooked back, and soldered. Heat-shrink each joint.
+Button terminals have no polarity — either wire on either blade.
 
-| Deck button | Event | BCM GPIO | Physical pin | Ground |
-|-------------|-------|----------|--------------|--------|
-| 1 | Pee | GPIO5 | 29 | 30 |
+Every button gets its **own ground pin** (a Dupont socket can't share a pin,
+unlike daisy-chained spades). All grounds are internally identical, so the
+assignment is just bookkeeping. Internal pull-ups are enabled in software —
+no resistors on buttons.
+
+| Deck button | Event | BCM GPIO | Physical pin | Ground pin |
+|-------------|-------|----------|--------------|------------|
+| 1 | Pee | GPIO5 | 29 | 25 |
 | 2 | Poop | GPIO6 | 31 | 30 |
 | 3 | Both | GPIO13 | 33 | 34 |
-| 4 | Bottle | GPIO19 | 35 | 34 |
-| 5 | Sleep toggle | GPIO26 | 37 | 39 |
-| 6 | Nursing toggle | GPIO16 | 36 | 39 |
+| 4 | Bottle | GPIO19 | 35 | 39 |
+| 5 | Sleep toggle | GPIO26 | 37 | 20 |
+| 6 | Nursing toggle | GPIO16 | 36 | 14 |
 
-RGB LED (common cathode — longest leg to ground):
+RGB LED (common cathode — longest leg to ground). Solder a resistor inline on
+each color leg (none on the cathode), heat-shrink each junction:
 
 | LED leg | Via | BCM GPIO | Physical pin |
 |---------|-----|----------|--------------|
-| Red | 330Ω | GPIO17 | 11 |
-| Green | 330Ω | GPIO27 | 13 |
-| Blue | 330Ω | GPIO22 | 15 |
+| Red | 430Ω | GPIO17 | 11 |
+| Green | 430Ω | GPIO27 | 13 |
+| Blue | 430Ω | GPIO22 | 15 |
 | Cathode (long leg) | — | GND | 9 |
+
+If the colors come out shuffled after assembly, don't resolder — remap the
+pin numbers under `gpio: led:` in `config.yaml` and restart the service.
 
 ```
                     Pi Zero 2 W header (top view, USB ports down)
@@ -61,21 +57,26 @@ RGB LED (common cathode — longest leg to ground):
           7 ○ ○ 8
      GND  9 ● ○ 10          9: LED common cathode
  R GPIO17 11 ● ○ 12
- G GPIO27 13 ● ○ 14 GND
+ G GPIO27 13 ● ● 14 GND     14: button 6 ground
  B GPIO22 15 ● ○ 16
          17 ○ ○ 18
-         19 ○ ○ 20 GND
+         19 ○ ● 20 GND      20: button 5 ground
          21 ○ ○ 22
          23 ○ ○ 24
-     GND 25 ○ ○ 26
+     GND 25 ● ○ 26          25: button 1 ground
          27 ○ ○ 28
-  1 GPIO5 29 ● ● 30 GND     30: buttons 1+2 ground
+  1 GPIO5 29 ● ● 30 GND     30: button 2 ground
   2 GPIO6 31 ● ○ 32
- 3 GPIO13 33 ● ● 34 GND     34: buttons 3+4 ground
+ 3 GPIO13 33 ● ● 34 GND     34: button 3 ground
  4 GPIO19 35 ● ● 36 GPIO16  36: button 6
  5 GPIO26 37 ● ○ 38
-     GND 39 ●               39: buttons 5+6 ground
+     GND 39 ●               39: button 4 ground
 ```
+
+Count twice before powering on: all button sockets sit in the bottom half of
+the header except the grounds on 14 and 20; nothing belongs in the top three
+rows (5V/3V3). Pin 1 is at the SD-card end, inner row; the square solder pad
+on the underside marks it.
 
 Pin choices are remappable in `config.yaml` under `gpio:` — none of the
 defaults conflict with boot straps, I2C, SPI, or UART, so those buses stay
@@ -86,12 +87,12 @@ free for future add-ons (e.g. an OLED on I2C).
 Parametric OpenSCAD, two printed parts:
 
 - **Top plate**: 2×3 grid of 24mm button holes (24.4mm default, tune
-  `button_hole_d` to your printer), 5mm LED hole front-center.
-- **Base**: Pi Zero mounting posts (58×23mm, M2.5) centered along the rear
-  wall, a rear slot the micro-USB power plug passes through, and M3 screw
-  bosses in the corners. Before printing, dry-fit the Pi against the rear
-  edge: if its power port doesn't line up with the slot, mirror
-  `usb_slot_x` in the .scad and re-render.
+  `button_hole_d` to your printer), 5mm LED hole front-center. The 3mm plate
+  thickness is within the 2–4mm range snap-in buttons clamp onto — push each
+  button in from the top until its side clips click (no ring nut). Solder the
+  leads *before* snapping buttons in.
+- **Base**: Pi Zero mounting posts (58×23mm, M2.5), side cutout for the
+  micro-USB power lead, screw bosses in the corners.
 
 Print: PLA or PETG, 0.2mm layers, no supports (top prints face-down).
 Adjust tolerances in the variables block, re-export STLs with:
