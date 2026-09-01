@@ -1,7 +1,8 @@
 """RGB status LED feedback (gpiozero.RGBLED).
 
 Colors:
-  dim green      — device on and ready, no session in progress
+  dim green 3s   — shown once at startup to confirm the device is running
+  off            — idle, no session in progress
   pulsing blue   — a sleep session is in progress (fades in and out)
   pulsing purple — a nursing session is in progress (fades in and out)
   blue↔purple    — both sessions somehow active at once: fade between colors
@@ -24,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 GREEN = (0, 1, 0)
 RED = (1, 0, 0)
 OFF = (0, 0, 0)
-DIM_GREEN = (0, 0.15, 0)  # ready — dim so the bright success blink stands out
+DIM_GREEN = (0, 0.15, 0)  # startup confirmation
 DIM_BLUE = (0, 0, 0.15)  # sleep session
 DIM_PURPLE = (0.15, 0, 0.15)  # nursing session
 
@@ -33,6 +34,7 @@ SUCCESS_ON_SECONDS = 0.15
 SUCCESS_OFF_SECONDS = 0.15
 
 PULSE_FADE_SECONDS = 2.0  # each direction of the session breathe effect
+STARTUP_GREEN_SECONDS = 3.0
 
 
 class StatusLed:
@@ -43,7 +45,8 @@ class StatusLed:
         self._sleep_active = False
         self._nursing_active = False
         self._revert_timer: threading.Timer | None = None
-        self._show_idle()
+        self._led.color = DIM_GREEN  # "I'm running" — reverts to idle shortly
+        self._revert_after(STARTUP_GREEN_SECONDS)
 
     def set_sessions(self, sleep_active: bool, nursing_active: bool) -> None:
         """Called whenever sleep/nursing toggle state may have changed."""
@@ -61,7 +64,7 @@ class StatusLed:
         elif self._nursing_active:
             self._pulse(DIM_PURPLE, OFF)
         else:
-            self._led.color = DIM_GREEN
+            self._led.color = OFF
 
     def _pulse(self, on_color: tuple, off_color: tuple) -> None:
         self._led.pulse(
