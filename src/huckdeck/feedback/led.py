@@ -1,11 +1,13 @@
 """RGB status LED feedback (gpiozero.RGBLED).
 
 Colors:
-  green flash   — event logged successfully
-  red blink     — retrying a send
-  solid red 5s  — event lost after all retries
-  dim blue      — a sleep or nursing session is in progress (idle color)
-  off           — idle, no session
+  dim green      — device on and ready, no session in progress
+  dim blue       — a sleep session is in progress
+  dim purple     — a nursing session is in progress
+  blue↔purple    — both sessions somehow active at once: alternate colors
+  green blinks   — event logged successfully (double blink, then back to idle)
+  red blink      — retrying a send
+  solid red 5s   — event lost after all retries
 
 gpiozero is only imported here, so keyboard-mode runs on the Mac never
 need it installed. Uses gpiozero's built-in blink() which runs on its own
@@ -21,8 +23,14 @@ _LOGGER = logging.getLogger(__name__)
 
 GREEN = (0, 1, 0)
 RED = (1, 0, 0)
-DIM_BLUE = (0, 0, 0.15)
 OFF = (0, 0, 0)
+DIM_GREEN = (0, 0.15, 0)  # ready — dim so the bright success blink stands out
+DIM_BLUE = (0, 0, 0.15)  # sleep session
+DIM_PURPLE = (0.15, 0, 0.15)  # nursing session
+
+SUCCESS_BLINKS = 2
+SUCCESS_ON_SECONDS = 0.15
+SUCCESS_OFF_SECONDS = 0.15
 
 
 class StatusLed:
@@ -30,44 +38,70 @@ class StatusLed:
         from gpiozero import RGBLED  # deferred: Pi-only dependency
 
         self._led = RGBLED(red=red_pin, green=green_pin, blue=blue_pin)
-        self._idle_color = OFF
+        self._sleep_active = False
+        self._nursing_active = False
         self._revert_timer: threading.Timer | None = None
+        self._show_idle()
 
-    def set_session_active(self, active: bool) -> None:
+    def set_sessions(self, sleep_active: bool, nursing_active: bool) -> None:
         """Called whenever sleep/nursing toggle state may have changed."""
-        self._idle_color = DIM_BLUE if active else OFF
+        self._sleep_active = sleep_active
+        self._nursing_active = nursing_active
         if self._revert_timer is None:
-            self._led.color = self._idle_color
+            self._show_idle()
 
-    def _flash(self, color: tuple, seconds: float) -> None:
+    def _show_idle(self) -> None:
+        if self._sleep_active and self._nursing_active:
+            # Shouldn't happen in practice, but if it does: alternate colors.
+            self._led.blink(
+                on_time=0.5, off_time=0.5, on_color=DIM_BLUE, off_color=DIM_PURPLE
+            )
+        elif self._sleep_active:
+            self._led.color = DIM_BLUE
+        elif self._nursing_active:
+            self._led.color = DIM_PURPLE
+        else:
+            self._led.color = DIM_GREEN
+
+    def _cancel_revert(self) -> None:
         if self._revert_timer is not None:
             self._revert_timer.cancel()
-        self._led.color = color
+            self._revert_timer = None
+
+    def _revert_after(self, seconds: float) -> None:
+        self._cancel_revert()
         self._revert_timer = threading.Timer(seconds, self._revert)
         self._revert_timer.daemon = True
         self._revert_timer.start()
 
     def _revert(self) -> None:
         self._revert_timer = None
-        self._led.color = self._idle_color
+        self._show_idle()
 
     def on_event(self, status: str, action: str, detail: str) -> None:
         match status:
             case "success":
-                self._flash(GREEN, 1.0)
+                self._led.blink(
+                    on_time=SUCCESS_ON_SECONDS,
+                    off_time=SUCCESS_OFF_SECONDS,
+                    on_color=GREEN,
+                    off_color=OFF,
+                    n=SUCCESS_BLINKS,
+                )
+                self._revert_after(
+                    SUCCESS_BLINKS * (SUCCESS_ON_SECONDS + SUCCESS_OFF_SECONDS) + 0.05
+                )
             case "retrying":
-                if self._revert_timer is not None:
-                    self._revert_timer.cancel()
-                    self._revert_timer = None
+                self._cancel_revert()
                 self._led.blink(on_time=0.25, off_time=0.25, on_color=RED, off_color=OFF)
             case "failed":
-                self._flash(RED, 5.0)
+                self._led.color = RED
+                self._revert_after(5.0)
             case "sending" | "ignored":
                 pass
 
     def close(self) -> None:
-        if self._revert_timer is not None:
-            self._revert_timer.cancel()
+        self._cancel_revert()
         self._led.off()
         self._led.close()
 
@@ -75,7 +109,7 @@ class StatusLed:
 class NullStatusLed:
     """Stand-in for keyboard mode / machines without an LED."""
 
-    def set_session_active(self, active: bool) -> None:
+    def set_sessions(self, sleep_active: bool, nursing_active: bool) -> None:
         pass
 
     def on_event(self, status: str, action: str, detail: str) -> None:

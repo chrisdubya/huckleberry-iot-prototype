@@ -70,7 +70,7 @@ async def main() -> None:
     def on_event(status: str, action: str, detail: str) -> None:
         statuses.append(status)
         led.on_event(status, action, detail)
-        led.set_session_active(dispatcher.sleep_active or dispatcher.nursing_active)
+        led.set_sessions(dispatcher.sleep_active, dispatcher.nursing_active)
 
     dispatcher = Dispatcher(client=client, state_path=state, debounce_seconds=0.0, on_event=on_event)
     consumer = asyncio.create_task(dispatcher.run())

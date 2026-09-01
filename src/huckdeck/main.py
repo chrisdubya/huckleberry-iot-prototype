@@ -86,7 +86,7 @@ async def main(argv: list[str] | None = None) -> int:
             _print_status(status, action, detail)
             led.on_event(status, action, detail)
             if dispatcher is not None:
-                led.set_session_active(dispatcher.sleep_active or dispatcher.nursing_active)
+                led.set_sessions(dispatcher.sleep_active, dispatcher.nursing_active)
 
         dispatcher = Dispatcher(
             client=client,
@@ -94,7 +94,7 @@ async def main(argv: list[str] | None = None) -> int:
             debounce_seconds=float(config.get("debounce_seconds", 2)),
             on_event=on_event,
         )
-        led.set_session_active(dispatcher.sleep_active or dispatcher.nursing_active)
+        led.set_sessions(dispatcher.sleep_active, dispatcher.nursing_active)
         if dispatcher.sleep_active:
             print("● Resumed with a sleep session in progress (press its button to complete it)")
         if dispatcher.nursing_active:
