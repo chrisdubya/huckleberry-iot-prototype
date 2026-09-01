@@ -2,9 +2,9 @@
 
 Colors:
   dim green      — device on and ready, no session in progress
-  dim blue       — a sleep session is in progress
-  dim purple     — a nursing session is in progress
-  blue↔purple    — both sessions somehow active at once: alternate colors
+  pulsing blue   — a sleep session is in progress (fades in and out)
+  pulsing purple — a nursing session is in progress (fades in and out)
+  blue↔purple    — both sessions somehow active at once: fade between colors
   green blinks   — event logged successfully (double blink, then back to idle)
   red blink      — retrying a send
   solid red 5s   — event lost after all retries
@@ -32,6 +32,8 @@ SUCCESS_BLINKS = 2
 SUCCESS_ON_SECONDS = 0.15
 SUCCESS_OFF_SECONDS = 0.15
 
+PULSE_FADE_SECONDS = 1.5  # each direction of the session breathe effect
+
 
 class StatusLed:
     def __init__(self, red_pin: int, green_pin: int, blue_pin: int) -> None:
@@ -52,16 +54,22 @@ class StatusLed:
 
     def _show_idle(self) -> None:
         if self._sleep_active and self._nursing_active:
-            # Shouldn't happen in practice, but if it does: alternate colors.
-            self._led.blink(
-                on_time=0.5, off_time=0.5, on_color=DIM_BLUE, off_color=DIM_PURPLE
-            )
+            # Shouldn't happen in practice, but if it does: fade between colors.
+            self._pulse(DIM_BLUE, DIM_PURPLE)
         elif self._sleep_active:
-            self._led.color = DIM_BLUE
+            self._pulse(DIM_BLUE, OFF)
         elif self._nursing_active:
-            self._led.color = DIM_PURPLE
+            self._pulse(DIM_PURPLE, OFF)
         else:
             self._led.color = DIM_GREEN
+
+    def _pulse(self, on_color: tuple, off_color: tuple) -> None:
+        self._led.pulse(
+            fade_in_time=PULSE_FADE_SECONDS,
+            fade_out_time=PULSE_FADE_SECONDS,
+            on_color=on_color,
+            off_color=off_color,
+        )
 
     def _cancel_revert(self) -> None:
         if self._revert_timer is not None:
