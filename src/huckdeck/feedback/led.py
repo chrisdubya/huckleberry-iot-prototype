@@ -3,13 +3,13 @@
 Colors:
   dim green 3s   — shown once at startup to confirm the device is running
   off            — idle, no session in progress
-  pulsing yellow — a sleep session is in progress (fades in and out)
-  pulsing blue   — a nursing session is in progress (fades in and out)
-  yellow↔blue    — both sessions somehow active at once: fade between colors
+  pulsing red    — a sleep session is in progress (fades in and out)
+  pulsing green  — a nursing session is in progress (fades in and out)
+  red↔green      — both sessions somehow active at once: fade between colors
   color blinks   — event logged successfully: double blink in the pressed
-                   button's color (white=pee, green=poo, purple=both since
-                   black isn't displayable, red=bottle, yellow=sleep,
-                   blue=nursing), then back to idle
+                   button's color (yellow=pee, purple=poo since black isn't
+                   displayable, white=both, blue=bottle, red=sleep,
+                   green=nursing), then back to idle
   red blink      — retrying a send
   solid red 5s   — event lost after all retries
 
@@ -32,21 +32,20 @@ YELLOW = (1, 0.6, 0)  # pure (1,1,0) reads greenish on RGB LEDs
 BLUE = (0, 0, 1)
 PURPLE = (1, 0, 1)
 OFF = (0, 0, 0)
-DIM_GREEN = (0, 0.15, 0)  # startup confirmation
-DIM_YELLOW = (0.15, 0.09, 0)  # sleep session (yellow button)
-DIM_BLUE = (0, 0, 0.15)  # nursing session (blue button)
+DIM_GREEN = (0, 0.15, 0)  # startup confirmation; nursing session (green button)
+DIM_RED = (0.15, 0, 0)  # sleep session (red button)
 
-# Success blink matches the pressed button's color. The "both" button is
+# Success blink matches the pressed button's color. The "poo" button is
 # black, which an LED can't show — purple stands in for it.
 SUCCESS_COLORS = {
-    "pee": WHITE,
-    "poo": GREEN,
-    "both": PURPLE,
-    "bottle": RED,
-    "sleep_start": YELLOW,
-    "sleep_stop": YELLOW,
-    "nursing_start": BLUE,
-    "nursing_stop": BLUE,
+    "pee": YELLOW,
+    "poo": PURPLE,
+    "both": WHITE,
+    "bottle": BLUE,
+    "sleep_start": RED,
+    "sleep_stop": RED,
+    "nursing_start": GREEN,
+    "nursing_stop": GREEN,
 }
 
 SUCCESS_BLINKS = 2
@@ -78,11 +77,11 @@ class StatusLed:
     def _show_idle(self) -> None:
         if self._sleep_active and self._nursing_active:
             # Shouldn't happen in practice, but if it does: fade between colors.
-            self._pulse(DIM_YELLOW, DIM_BLUE)
+            self._pulse(DIM_RED, DIM_GREEN)
         elif self._sleep_active:
-            self._pulse(DIM_YELLOW, OFF)
+            self._pulse(DIM_RED, OFF)
         elif self._nursing_active:
-            self._pulse(DIM_BLUE, OFF)
+            self._pulse(DIM_GREEN, OFF)
         else:
             self._led.color = OFF
 
