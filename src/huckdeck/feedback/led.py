@@ -32,7 +32,7 @@ SUCCESS_BLINKS = 2
 SUCCESS_ON_SECONDS = 0.15
 SUCCESS_OFF_SECONDS = 0.15
 
-PULSE_FADE_SECONDS = 5.0  # each direction of the session breathe effect
+PULSE_FADE_SECONDS = 3.25  # each direction of the session breathe effect
 
 
 class StatusLed:
