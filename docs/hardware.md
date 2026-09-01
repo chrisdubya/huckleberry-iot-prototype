@@ -95,6 +95,8 @@ Parametric OpenSCAD, two printed parts:
   micro-USB power lead, screw bosses in the corners.
 
 Print: PLA or PETG, 0.2mm layers, no supports (top prints face-down).
+`case/huckdeck_case.3mf` is a ready-to-slice Bambu Studio project with both
+parts plated and the print settings used for the as-built case.
 Adjust tolerances in the variables block, re-export STLs with:
 
 ```sh
