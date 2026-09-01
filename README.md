@@ -47,9 +47,9 @@ nursing toggle state survives restarts (`~/.huckdeck.state.json`).
 ## Physical device (Raspberry Pi Zero 2 W)
 
 The same package runs on the Pi with six 24mm arcade buttons and an RGB
-status LED (green at startup = running, green double-blink = logged, red =
-retrying, pulsing blue = sleep in progress, pulsing purple = nursing in
-progress, fading blue/purple if both are somehow active at once):
+status LED (green at startup = running, double-blink in the pressed button's
+color = logged, red = retrying, pulsing yellow = sleep in progress, pulsing
+blue = nursing in progress, fading yellow/blue if both are somehow active):
 
 - Parts list and wiring: [docs/hardware.md](docs/hardware.md)
 - Flash + provision + systemd service: [docs/pi-setup.md](docs/pi-setup.md)
