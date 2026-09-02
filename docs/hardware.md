@@ -7,7 +7,7 @@
 | Raspberry Pi Zero 2 **WH** | Pre-soldered header. Bare board ~$18 (PiShop.us, Adafruit) or an Amazon kit with genuine board + heatsink (~high $20s) | $18–30 |
 | microSD 32GB, A1-rated | SanDisk / Samsung | $8 |
 | 5V/2.5A PSU + micro-USB cable | Any solid 2.4A+ brick | $8 |
-| 6× 24mm arcade buttons | **Snap-in** Sanwa OBSF-24 clones (EG STARTS 12-pack). Two colors: e.g. yellow/brown for diapers, white/blue for feed & sleep | $9 |
+| 6× 24mm arcade buttons | **Snap-in** Sanwa OBSF-24 clones (EG STARTS 12-pack). As built: yellow=pee, black=poop, white=both, blue=bottle, red=sleep, green=nursing | $9 |
 | 5mm diffused **common-cathode** RGB LED | + 3× resistors, 330–470Ω (as built: 430Ω 1/4W) | $2 |
 | Female-female Dupont jumpers (20cm) | Cut in half: female end presses onto the Pi header, cut end solders to the button | $5 |
 | Heat shrink tubing, 3/16" | Insulates the soldered joints and inline resistors | $3 |
@@ -27,14 +27,14 @@ unlike daisy-chained spades). All grounds are internally identical, so the
 assignment is just bookkeeping. Internal pull-ups are enabled in software —
 no resistors on buttons.
 
-| Deck button | Event | BCM GPIO | Physical pin | Ground pin |
-|-------------|-------|----------|--------------|------------|
-| 1 | Pee | GPIO5 | 29 | 25 |
-| 2 | Poop | GPIO6 | 31 | 30 |
-| 3 | Both | GPIO13 | 33 | 34 |
-| 4 | Bottle | GPIO19 | 35 | 39 |
-| 5 | Sleep toggle | GPIO26 | 37 | 20 |
-| 6 | Nursing toggle | GPIO16 | 36 | 14 |
+| Deck button | Color | Event | BCM GPIO | Physical pin | Ground pin |
+|-------------|-------|-------|----------|--------------|------------|
+| 1 | Yellow | Pee | GPIO5 | 29 | 25 |
+| 2 | Black | Poop | GPIO6 | 31 | 30 |
+| 3 | White | Both | GPIO13 | 33 | 34 |
+| 4 | Blue | Bottle | GPIO19 | 35 | 39 |
+| 5 | Red | Sleep toggle | GPIO26 | 37 | 20 |
+| 6 | Green | Nursing toggle | GPIO16 | 36 | 14 |
 
 RGB LED (common cathode — longest leg to ground). Solder a resistor inline on
 each color leg (none on the cathode), heat-shrink each junction:
@@ -48,6 +48,18 @@ each color leg (none on the cathode), heat-shrink each junction:
 
 If the colors come out shuffled after assembly, don't resolder — remap the
 pin numbers under `gpio: led:` in `config.yaml` and restart the service.
+
+What the LED means (see `src/huckdeck/feedback/led.py`):
+
+| Signal | Meaning |
+|--------|---------|
+| Dim green, 3s at startup | Service is up and running |
+| Off | Idle, no session in progress |
+| Double-blink in a button's color | That event logged (purple stands in for the black poop button) |
+| Slow pulsing red / green | Sleep / nursing session in progress |
+| Slow fade red↔green | Both sessions active at once (shouldn't happen) |
+| Fast red blink | Retrying a failed send |
+| Solid red, 5s | Event lost after all retries |
 
 ```
                     Pi Zero 2 W header (top view, USB ports down)

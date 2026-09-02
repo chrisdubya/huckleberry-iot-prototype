@@ -54,7 +54,8 @@ ssh pi@huckdeck.local journalctl -u huckdeck -f
 ```
 
 You should see "Connected. Logging events for: …". Press a wired button
-(see [hardware.md](hardware.md)) — green LED flash and the event appears in
+(see [hardware.md](hardware.md)) — the LED double-blinks in that button's
+color and the event appears in
 the Huckleberry app. Reboot (`sudo reboot`) and confirm the service comes
 back on its own.
 
