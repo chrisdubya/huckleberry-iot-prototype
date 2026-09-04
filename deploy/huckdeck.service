@@ -11,6 +11,8 @@ Type=simple
 User=pi
 # stdout is block-buffered without a tty; unbuffer so prints reach the journal
 Environment=PYTHONUNBUFFERED=1
+# Setup mode serves its web page on port 80
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 WorkingDirectory=/home/pi/huckleberry-iot-prototype
 ExecStart=/home/pi/.local/bin/uv run --extra pi huckdeck --input gpio
 Restart=always

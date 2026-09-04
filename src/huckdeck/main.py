@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 from .client import HuckClient
 from .dispatcher import Dispatcher
 from .feedback.led import NullStatusLed
+from .setup.flow import SetupFlow
+from .setup.wifi import make_wifi
 
 STATE_PATH = Path.home() / ".huckdeck.state.json"
 
@@ -48,15 +50,18 @@ def _print_status(status: str, action: str, detail: str) -> None:
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="huckdeck")
     parser.add_argument("--input", choices=["keyboard", "gpio"], help="override config.yaml input source")
+    parser.add_argument("--setup", action="store_true", help="force setup mode (hotspot + Wi-Fi page)")
+    parser.add_argument("--wifi", choices=["nmcli", "fake"], help="override config.yaml setup.wifi backend")
+    parser.add_argument("--setup-port", type=int, help="override config.yaml setup.port")
+    parser.add_argument("--identity", action="store_true", help="print the hotspot name/password for the sticker")
     args = parser.parse_args(argv)
 
-    load_dotenv()
-    email = os.environ.get("HUCKLEBERRY_EMAIL")
-    password = os.environ.get("HUCKLEBERRY_PASSWORD")
-    timezone = os.environ.get("HUCKLEBERRY_TZ", "America/New_York")
-    if not email or not password:
-        print("Set HUCKLEBERRY_EMAIL and HUCKLEBERRY_PASSWORD in .env (see .env.example)")
-        return 1
+    if args.identity:
+        from .setup import identity as identity_mod
+
+        ident = identity_mod.load_or_create()
+        print(f"Hotspot:  {ident.ssid}\nPassword: {ident.password}\nQR text:  {ident.wifi_qr_payload}")
+        return 0
 
     config = yaml.safe_load(_find_config().read_text())
     input_mode = args.input or config.get("input", "keyboard")
@@ -73,6 +78,39 @@ async def main(argv: list[str] | None = None) -> int:
 
         led = NullStatusLed()
         buttons = {str(k): v for k, v in config["buttons"].items()}
+
+    # Setup mode: no Wi-Fi on the Pi (or --setup) → hotspot + web page until we're online.
+    setup_cfg = config.get("setup", {})
+    wifi = make_wifi(args.wifi or setup_cfg.get("wifi", "nmcli"))
+    setup_port = args.setup_port or int(setup_cfg.get("port", 80))
+    flow: SetupFlow | None = None
+
+    def make_flow() -> SetupFlow:
+        from .setup import identity as identity_mod
+
+        return SetupFlow(wifi, led, identity_mod.load_or_create(), port=setup_port)
+
+    if args.setup or (input_mode == "gpio" and not await wifi.has_saved_network()):
+        flow = make_flow()
+        await flow.run_wifi()
+
+    load_dotenv()
+    email = os.environ.get("HUCKLEBERRY_EMAIL")
+    password = os.environ.get("HUCKLEBERRY_PASSWORD")
+    timezone = os.environ.get("HUCKLEBERRY_TZ", "America/New_York")
+    if not email or not password:
+        print("Set HUCKLEBERRY_EMAIL and HUCKLEBERRY_PASSWORD in .env (see .env.example)")
+        if flow is not None or input_mode == "gpio":
+            # Keep the setup page reachable on the LAN; the sign-in step will live there.
+            flow = flow or make_flow()
+            try:
+                await flow.wait_for_login()
+            finally:
+                await flow.close()
+                led.close()
+        return 1
+    if flow is not None:
+        led.set_setup(None)
 
     async with aiohttp.ClientSession() as websession:
         client = HuckClient(email, password, timezone, websession, config)
@@ -112,6 +150,8 @@ async def main(argv: list[str] | None = None) -> int:
             # Let queued sends finish before tearing down the session.
             await dispatcher.wait_idle()
             consumer.cancel()
+            if flow is not None:
+                await flow.close()
             led.close()
     print("Bye.")
     return 0

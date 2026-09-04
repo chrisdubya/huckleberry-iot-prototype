@@ -21,6 +21,9 @@ pi = [
     "lgpio>=0.2.2 ; sys_platform == 'linux'",
 ]
 
+[dependency-groups]
+dev = ["pytest>=8"]
+
 [project.scripts]
 huckdeck = "huckdeck.main:run"
 

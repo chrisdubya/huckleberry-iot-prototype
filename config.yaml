@@ -43,3 +43,10 @@ gpio:
     red: 17
     green: 27
     blue: 22
+
+# First-boot setup mode: with no saved Wi-Fi the deck runs a hotspot and a
+# web page to pick one (docs/pi-setup.md). wifi: nmcli on the Pi, fake for
+# development on a Mac. Port 80 needs CAP_NET_BIND_SERVICE (set in the unit).
+setup:
+  wifi: nmcli
+  port: 80

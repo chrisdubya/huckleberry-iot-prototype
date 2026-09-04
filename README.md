@@ -53,6 +53,8 @@ pulsing green = nursing in progress, fading red/green if both are active):
 
 - Parts list and wiring: [docs/hardware.md](docs/hardware.md)
 - Flash + provision + systemd service: [docs/pi-setup.md](docs/pi-setup.md)
+- No Wi-Fi configured? The deck runs a hotspot with a setup page
+  (pulsing blue LED); see "Setup mode" in the same doc
 - 3D-printable case: [case/huckdeck_case.scad](case/huckdeck_case.scad)
   (parametric OpenSCAD; pre-rendered STLs alongside)
 

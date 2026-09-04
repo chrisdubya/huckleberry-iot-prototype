@@ -1,0 +1,8 @@
+// Let the huckdeck service (user 'pi') drive NetworkManager without sudo:
+// scan, run the setup hotspot, and save the chosen home network.
+// Installed to /etc/polkit-1/rules.d/50-huckdeck-networkmanager.rules
+polkit.addRule(function (action, subject) {
+  if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 && subject.user === "pi") {
+    return polkit.Result.YES;
+  }
+});

@@ -13,6 +13,11 @@ Colors:
   red blink      — retrying a send
   solid red 5s   — event lost after all retries
 
+Setup mode (see setup/flow.py), all blue so it can't be confused with an
+event: pulsing = hotspot up, waiting for the phone; fast blink = joining
+the chosen network; solid 3s = joined; dim solid = on Wi-Fi, waiting for
+the Huckleberry sign-in. A red blink after joining means it failed.
+
 gpiozero is only imported here, so keyboard-mode runs on the Mac never
 need it installed. Uses gpiozero's built-in blink() which runs on its own
 background thread — no asyncio coupling.
@@ -34,6 +39,7 @@ PURPLE = (1, 0, 1)
 OFF = (0, 0, 0)
 DIM_GREEN = (0, 0.15, 0)  # startup confirmation; nursing session (green button)
 DIM_RED = (0.15, 0, 0)  # sleep session (red button)
+DIM_BLUE = (0, 0, 0.15)  # setup mode
 
 # Success blink matches the pressed button's color. The "poo" button is
 # black, which an LED can't show — purple stands in for it.
@@ -73,6 +79,25 @@ class StatusLed:
         self._nursing_active = nursing_active
         if self._revert_timer is None:
             self._show_idle()
+
+    def set_setup(self, state: str | None) -> None:
+        """Setup-mode signals; None hands the LED back to the deck's idle logic."""
+        self._cancel_revert()
+        match state:
+            case "hotspot":
+                self._pulse(DIM_BLUE, OFF)
+            case "joining":
+                self._led.blink(on_time=0.25, off_time=0.25, on_color=BLUE, off_color=OFF)
+            case "connected":
+                self._led.color = BLUE
+            case "failed":
+                self._led.blink(on_time=0.25, off_time=0.25, on_color=RED, off_color=OFF)
+            case "waiting_login":
+                self._led.color = DIM_BLUE
+            case None:
+                self._show_idle()
+            case _:
+                _LOGGER.warning("unknown setup LED state %r", state)
 
     def _show_idle(self) -> None:
         if self._sleep_active and self._nursing_active:
@@ -140,6 +165,9 @@ class NullStatusLed:
     """Stand-in for keyboard mode / machines without an LED."""
 
     def set_sessions(self, sleep_active: bool, nursing_active: bool) -> None:
+        pass
+
+    def set_setup(self, state: str | None) -> None:
         pass
 
     def on_event(self, status: str, action: str, detail: str) -> None:

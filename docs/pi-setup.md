@@ -59,6 +59,62 @@ color and the event appears in
 the Huckleberry app. Reboot (`sudo reboot`) and confirm the service comes
 back on its own.
 
+## Setup mode: Wi-Fi from a phone (no flashing tool needed)
+
+For a deck that ships to someone else, skip the WiFi step in the imager.
+With no saved Wi-Fi network the service boots into **setup mode**:
+
+1. The LED pulses blue and the deck runs its own WPA2 hotspot. The name and
+   password are unique per device — print them (and a Wi-Fi QR code) on a
+   sticker. Get them with:
+
+   ```sh
+   ssh pi@huckdeck.local "cd huckleberry-iot-prototype && uv run huckdeck --identity"
+   ```
+
+   They're generated on first run and kept in `~/.huckdeck.identity.json`.
+2. Join the hotspot from a phone (scan the QR, or type the password). The
+   phone's captive-portal sheet opens the setup page on its own; if it
+   doesn't, browse to `http://10.42.0.1/`.
+3. Pick the home network from the list (scanned before the hotspot took
+   the radio) and enter its password. "Other network…" covers hidden SSIDs
+   and anything not in the list. 2.4GHz only.
+4. The LED blinks blue while the deck drops the hotspot and joins. Solid
+   blue for a few seconds = joined; the page is now at
+   `http://huckdeck.local/` on the home network. Blinking red = the join
+   failed; the hotspot comes back and the page shows why.
+
+Once on Wi-Fi the deck starts normally if `.env` exists. Until the
+Huckleberry sign-in page is built, it otherwise waits with a dim blue LED
+and the page reachable at `huckdeck.local`; add `.env` and restart.
+
+How it works, and what the provision script installs for it:
+
+- NetworkManager does the radio work through `nmcli`
+  (`src/huckdeck/setup/wifi.py`). `deploy/polkit-huckdeck-networkmanager.rules`
+  lets the `pi` user do that without sudo.
+- `deploy/nm-dnsmasq-captive.conf` makes the hotspot's DNS answer every name
+  with the deck's address, so phones' connectivity probes reach the setup
+  page and trigger the captive-portal sheet.
+- The page listens on port 80; `AmbientCapabilities=CAP_NET_BIND_SERVICE`
+  in the unit allows that as a non-root user. `setup.port` in `config.yaml`
+  changes it.
+- The chosen network's password is passed to `nmcli` on its command line,
+  so it's briefly visible in the process list on the Pi itself. The saved
+  profile lives in `/etc/NetworkManager/system-connections/`, root-only.
+
+Force setup mode on a deck that already has Wi-Fi (e.g. a new router) with
+`huckdeck --setup`; a button gesture for this is still to come.
+
+To try the pages on a Mac without a Pi, use the fake radio and a high port:
+
+```sh
+uv run huckdeck --setup --wifi fake --setup-port 8080
+```
+
+Open `http://localhost:8080/`. Joining anything with "bad" in the name, or
+with a password containing "wrong", fails so the error path can be seen.
+
 ## Updating the code
 
 ```sh

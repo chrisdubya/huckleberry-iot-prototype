@@ -9,7 +9,7 @@ APP_DIR="$HOME/huckleberry-iot-prototype"
 
 echo "==> apt packages (lgpio builds from source on Trixie)"
 sudo apt-get update
-sudo apt-get install -y git python3-dev swig liblgpio-dev
+sudo apt-get install -y git python3-dev swig liblgpio-dev network-manager dnsmasq-base
 
 echo "==> uv"
 if ! command -v uv >/dev/null && [ ! -x "$HOME/.local/bin/uv" ]; then
@@ -24,6 +24,11 @@ fi
 cd "$APP_DIR"
 git pull --ff-only
 uv sync --extra pi
+
+echo "==> setup mode (hotspot) support: polkit rule + captive DNS"
+sudo install -m 644 deploy/polkit-huckdeck-networkmanager.rules /etc/polkit-1/rules.d/50-huckdeck-networkmanager.rules
+sudo install -d /etc/NetworkManager/dnsmasq-shared.d
+sudo install -m 644 deploy/nm-dnsmasq-captive.conf /etc/NetworkManager/dnsmasq-shared.d/huckdeck-captive.conf
 
 if [ ! -f "$APP_DIR/.env" ]; then
   echo

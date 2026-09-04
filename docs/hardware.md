@@ -60,6 +60,10 @@ What the LED means (see `src/huckdeck/feedback/led.py`):
 | Slow fade red↔green | Both sessions active at once (shouldn't happen) |
 | Fast red blink | Retrying a failed send |
 | Solid red, 5s | Event lost after all retries |
+| Pulsing blue | Setup mode: hotspot up, waiting for a phone (see pi-setup.md) |
+| Fast blue blink | Setup mode: joining the chosen Wi-Fi |
+| Solid blue, 3s | Setup mode: joined Wi-Fi |
+| Dim solid blue | On Wi-Fi, waiting for Huckleberry sign-in |
 
 ```
                     Pi Zero 2 W header (top view, USB ports down)

@@ -3,6 +3,7 @@
 
 # Runtime state
 *.state.json
+*.identity.json
 
 # Python
 .venv/
@@ -12,3 +13,4 @@ dist/
 
 # OS
 .DS_Store
+.claude/launch.json
