@@ -73,11 +73,15 @@ With no saved Wi-Fi network the service boots into **setup mode**:
    ```
 
    They're generated on first run and kept in `~/.huckdeck.identity.json`.
-2. Join the hotspot from the phone's **Settings → Wi-Fi** (type the
-   password). The captive-portal sheet then opens the setup page on its
-   own. Joining by scanning the QR from the Camera app works too, but iOS
-   leaves the camera open and is slow to show the sheet from there. If no
-   sheet appears within a few seconds, browse to `http://10.42.0.1/`.
+2. Join the hotspot from the phone (Settings → Wi-Fi, or scan the QR), then
+   **open Safari and go to `10.42.0.1`**. That's the path to print on the
+   sticker. iPhones do eventually pop up the sign-in sheet on their own,
+   but on recent models that takes ~45 seconds after joining — the deck
+   answers the phone's probe within 100ms (visible in the journal as
+   `hotspot +…s` lines); the wait is inside iOS and is a widely reported
+   quirk of hotspots with no internet. Android and iPad show the sheet
+   quickly. Scanning the QR from the Camera app leaves the camera open;
+   that's iOS too.
 3. Pick the home network from the list (scanned before the hotspot took
    the radio) and enter its password. "Other network…" covers hidden SSIDs
    and anything not in the list. 2.4GHz only.
