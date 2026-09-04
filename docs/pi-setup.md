@@ -74,7 +74,8 @@ With no saved Wi-Fi network the service boots into **setup mode**:
 
    They're generated on first run and kept in `~/.huckdeck.identity.json`.
 2. Join the hotspot from the phone (Settings → Wi-Fi, or scan the QR), then
-   **open Safari and go to `10.42.0.1`**. That's the path to print on the
+   **open Safari and go to `huckdeck.local`** (verified working over the
+   hotspot; `10.42.0.1` also works). That's the path to print on the
    sticker. iPhones do eventually pop up the sign-in sheet on their own,
    but on recent models that takes ~45 seconds after joining — the deck
    answers the phone's probe within 100ms (visible in the journal as
@@ -110,7 +111,19 @@ How it works, and what the provision script installs for it:
   profile lives in `/etc/NetworkManager/system-connections/`, root-only.
 
 Force setup mode on a deck that already has Wi-Fi (e.g. a new router) with
-`huckdeck --setup`; a button gesture for this is still to come.
+`huckdeck --setup`; a button gesture for this is still to come. Run it as
+a transient unit so it survives the SSH session dropping when the hotspot
+takes the radio, and gets the port-80 capability:
+
+```sh
+sudo systemctl stop huckdeck && sudo systemd-run --unit huckdeck-setup --uid pi --gid pi \
+  -p AmbientCapabilities=CAP_NET_BIND_SERVICE -p WorkingDirectory=/home/pi/huckleberry-iot-prototype \
+  -E PYTHONUNBUFFERED=1 -E HOME=/home/pi \
+  /home/pi/.local/bin/uv run --extra pi huckdeck --setup --input gpio
+```
+
+Afterwards: `sudo systemctl stop huckdeck-setup; sudo systemctl start huckdeck`.
+The journal for `huckdeck-setup` has a `hotspot +…s` line per request.
 
 To try the pages on a Mac without a Pi, use the fake radio and a high port:
 

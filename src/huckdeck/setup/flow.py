@@ -106,8 +106,9 @@ class SetupFlow:
         self.state.hotspot_up = True
         self._hotspot_started = time.monotonic()
         self.led.set_setup("hotspot")
+        port = "" if self.port == 80 else f":{self.port}"
         print(f"Setup mode: join Wi-Fi '{self.identity.ssid}' (password {self.identity.password}) "
-              f"and open http://10.42.0.1{'' if self.port == 80 else f':{self.port}'}/")
+              f"and open http://huckdeck.local{port}/ (or http://10.42.0.1{port}/)")
 
     async def run_wifi(self) -> str:
         """Run until the deck is on a Wi-Fi network; returns its SSID."""
