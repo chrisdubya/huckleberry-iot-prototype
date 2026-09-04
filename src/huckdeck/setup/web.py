@@ -52,8 +52,15 @@ async def _captive_redirect(request: web.Request, handler):
     # a direct visit names the address it actually connected to.
     local = request.transport.get_extra_info("sockname") if request.transport else None
     local_ip = local[0] if local else ""
+    if flow.state.hotspot_up:
+        # Hotspot-phase request log: shows when the phone's captive probes
+        # arrive relative to the hotspot coming up (journalctl on the Pi).
+        _LOGGER.info(
+            "hotspot +%.1fs %s %s %s%s ua=%s",
+            flow.seconds_since_hotspot_up(), request.remote, request.method, host, request.path_qs,
+            request.headers.get("User-Agent", "")[:60],
+        )
     if flow.state.hotspot_up and host and host not in OUR_HOSTS and host != local_ip:
-        _LOGGER.debug("captive probe for %s%s -> portal", host, request.path)
         raise web.HTTPFound(_portal_url(flow))
     return await handler(request)
 

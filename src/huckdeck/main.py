@@ -159,6 +159,7 @@ async def main(argv: list[str] | None = None) -> int:
 
 def run() -> None:
     logging.basicConfig(level=logging.WARNING)
+    logging.getLogger("huckdeck.setup").setLevel(logging.INFO)
     try:
         sys.exit(asyncio.run(main()))
     except KeyboardInterrupt:

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 
 from aiohttp import web
@@ -59,6 +60,7 @@ class SetupFlow:
         self._submitted = asyncio.Event()
         self._pending: _Submission | None = None
         self._runner: web.AppRunner | None = None
+        self._hotspot_started: float = 0.0
 
     # -- web side ------------------------------------------------------------
 
@@ -89,6 +91,9 @@ class SetupFlow:
 
     # -- sequence ------------------------------------------------------------
 
+    def seconds_since_hotspot_up(self) -> float:
+        return time.monotonic() - self._hotspot_started if self._hotspot_started else 0.0
+
     async def _scan(self) -> None:
         try:
             self.state.networks = await self.wifi.scan()
@@ -99,6 +104,7 @@ class SetupFlow:
     async def _hotspot_up(self) -> None:
         await self.wifi.start_hotspot(self.identity.ssid, self.identity.password)
         self.state.hotspot_up = True
+        self._hotspot_started = time.monotonic()
         self.led.set_setup("hotspot")
         print(f"Setup mode: join Wi-Fi '{self.identity.ssid}' (password {self.identity.password}) "
               f"and open http://10.42.0.1{'' if self.port == 80 else f':{self.port}'}/")

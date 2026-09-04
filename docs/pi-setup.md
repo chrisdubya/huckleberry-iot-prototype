@@ -73,9 +73,11 @@ With no saved Wi-Fi network the service boots into **setup mode**:
    ```
 
    They're generated on first run and kept in `~/.huckdeck.identity.json`.
-2. Join the hotspot from a phone (scan the QR, or type the password). The
-   phone's captive-portal sheet opens the setup page on its own; if it
-   doesn't, browse to `http://10.42.0.1/`.
+2. Join the hotspot from the phone's **Settings → Wi-Fi** (type the
+   password). The captive-portal sheet then opens the setup page on its
+   own. Joining by scanning the QR from the Camera app works too, but iOS
+   leaves the camera open and is slow to show the sheet from there. If no
+   sheet appears within a few seconds, browse to `http://10.42.0.1/`.
 3. Pick the home network from the list (scanned before the hotspot took
    the radio) and enter its password. "Other network…" covers hidden SSIDs
    and anything not in the list. 2.4GHz only.
