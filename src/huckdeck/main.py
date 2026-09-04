@@ -5,15 +5,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 import sys
 from pathlib import Path
 
 import aiohttp
 import yaml
-from dotenv import load_dotenv
 
-from .client import HuckClient
+from . import credentials
+from .client import AuthError, HuckClient
 from .dispatcher import Dispatcher
 from .feedback.led import NullStatusLed
 from .setup.flow import SetupFlow
@@ -38,6 +37,20 @@ def _find_config() -> Path:
         if candidate.is_file():
             return candidate
     raise FileNotFoundError("config.yaml not found (run from the project directory)")
+
+
+async def _wait_for_stop() -> None:
+    import signal
+
+    loop = asyncio.get_running_loop()
+    stop = asyncio.Event()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop.set)
+    try:
+        await stop.wait()
+    finally:
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.remove_signal_handler(sig)
 
 
 def _print_status(status: str, action: str, detail: str) -> None:
@@ -79,44 +92,57 @@ async def main(argv: list[str] | None = None) -> int:
         led = NullStatusLed()
         buttons = {str(k): v for k, v in config["buttons"].items()}
 
-    # Setup mode: no Wi-Fi on the Pi (or --setup) → hotspot + web page until we're online.
+    # Setup mode. On the Pi the web page always runs (huckdeck.local); with
+    # no saved Wi-Fi it first runs the hotspot flow. --setup forces that.
     setup_cfg = config.get("setup", {})
     wifi = make_wifi(args.wifi or setup_cfg.get("wifi", "nmcli"))
     setup_port = args.setup_port or int(setup_cfg.get("port", 80))
     flow: SetupFlow | None = None
-
-    def make_flow() -> SetupFlow:
+    if args.setup or input_mode == "gpio":
         from .setup import identity as identity_mod
 
-        return SetupFlow(wifi, led, identity_mod.load_or_create(), port=setup_port)
+        flow = SetupFlow(wifi, led, identity_mod.load_or_create(), port=setup_port)
+        if args.setup or not await wifi.has_saved_network():
+            await flow.run_wifi()
+        else:
+            await flow.serve()
 
-    if args.setup or (input_mode == "gpio" and not await wifi.has_saved_network()):
-        flow = make_flow()
-        await flow.run_wifi()
-
-    load_dotenv()
-    email = os.environ.get("HUCKLEBERRY_EMAIL")
-    password = os.environ.get("HUCKLEBERRY_PASSWORD")
-    timezone = os.environ.get("HUCKLEBERRY_TZ", "America/New_York")
-    if not email or not password:
+    creds = credentials.load()
+    if creds is None and flow is None:
         print("Set HUCKLEBERRY_EMAIL and HUCKLEBERRY_PASSWORD in .env (see .env.example)")
-        if flow is not None or input_mode == "gpio":
-            # Keep the setup page reachable on the LAN; the sign-in step will live there.
-            flow = flow or make_flow()
-            try:
-                await flow.wait_for_login()
-            finally:
-                await flow.close()
-                led.close()
         return 1
-    if flow is not None:
-        led.set_setup(None)
 
     async with aiohttp.ClientSession() as websession:
-        client = HuckClient(email, password, timezone, websession, config)
-        print("Authenticating with Huckleberry…")
-        await client.connect()
+        while True:
+            if creds is None:
+                assert flow is not None
+                creds = await flow.wait_for_login()
+            client = HuckClient(creds, websession, config)
+            print(f"Authenticating with Huckleberry ({creds.source})…")
+            try:
+                await client.connect()
+            except AuthError as exc:
+                print(f"✗ {exc}")
+                if flow is None or creds.source == "env":
+                    return 1
+                credentials.clear()  # back to the sign-in page
+                creds = None
+                continue
+            break
         print(f"Connected. Logging events for: {client.child_name}\n")
+        if creds.source == "file" and client.refresh_token and client.refresh_token != creds.refresh_token:
+            creds.refresh_token = client.refresh_token
+            credentials.save(creds)
+        if flow is not None:
+            flow.set_running(client.child_name, can_sign_out=creds.source == "file")
+            led.set_setup(None)
+        if input_mode == "keyboard" and not sys.stdin.isatty():
+            # Dev run under a preview server: no keys to read, just keep the web page up.
+            print("No terminal for keyboard input; serving the web page only (Ctrl-C / SIGTERM to stop).")
+            await _wait_for_stop()
+            if flow is not None:
+                await flow.close()
+            return 0
 
         dispatcher: Dispatcher | None = None
 

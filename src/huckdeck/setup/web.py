@@ -34,6 +34,9 @@ def make_app(flow: SetupFlow) -> web.Application:
     app[FLOW_KEY] = flow
     app.router.add_get("/", _index)
     app.router.add_post("/wifi", _submit_wifi)
+    app.router.add_post("/login", _submit_login)
+    app.router.add_post("/child", _submit_child)
+    app.router.add_post("/signout", _signout)
     app.router.add_get("/status.json", _status)
     app.router.add_route("*", "/{tail:.*}", _catch_all)
     return app
@@ -78,8 +81,14 @@ def _render(flow: SetupFlow, error: str | None = None, selected: str | None = No
         html = pages.wifi_form(state.networks, error or state.error, selected)
     elif state.phase == "joining":
         html = pages.joining(state.target_ssid or "", flow.identity.ssid)
-    else:
-        html = pages.connected(state.connected_ssid or "", state.has_internet, state.phase == "waiting_login")
+    elif state.phase == "login":
+        html = pages.login_form(error or state.error, state.email)
+    elif state.phase == "choose_child":
+        html = pages.child_picker(state.children, error)
+    elif state.phase == "running":
+        html = pages.running(state.child_name or "", state.connected_ssid, state.can_sign_out)
+    else:  # connected / starting: brief transitional states
+        html = pages.starting(state.connected_ssid, state.child_name)
     return web.Response(text=html, content_type="text/html", headers={"Cache-Control": "no-store"})
 
 
@@ -119,6 +128,61 @@ async def _submit_wifi(request: web.Request) -> web.Response:
     return _render(flow)
 
 
+async def _submit_login(request: web.Request) -> web.Response:
+    flow: SetupFlow = request.app[FLOW_KEY]
+    if flow.state.phase != "login":
+        raise web.HTTPFound("/")
+    form = await request.post()
+    email = str(form.get("email", "")).strip()
+    password = str(form.get("password", ""))
+    timezone = str(form.get("timezone", "")).strip() or flow.default_timezone
+    if not email or "@" not in email:
+        flow.state.email = email
+        return _render(flow, "Enter the email address you use with Huckleberry.")
+    if not password:
+        flow.state.email = email
+        return _render(flow, "Enter your Huckleberry password.")
+    if not _valid_timezone(timezone):
+        timezone = flow.default_timezone
+    error = await flow.try_sign_in(email, password, timezone)
+    if error:
+        return _render(flow, error)
+    raise web.HTTPFound("/")
+
+
+async def _submit_child(request: web.Request) -> web.Response:
+    flow: SetupFlow = request.app[FLOW_KEY]
+    if flow.state.phase != "choose_child":
+        raise web.HTTPFound("/")
+    form = await request.post()
+    error = flow.choose_child(str(form.get("child", "")))
+    if error:
+        return _render(flow, error)
+    raise web.HTTPFound("/")
+
+
+async def _signout(request: web.Request) -> web.Response:
+    flow: SetupFlow = request.app[FLOW_KEY]
+    if flow.state.phase != "running" or not flow.state.can_sign_out:
+        raise web.HTTPFound("/")
+    flow.state.phase = "signing_out"
+    resp = web.Response(text=pages.signed_out(), content_type="text/html")
+    await resp.prepare(request)
+    await resp.write_eof()
+    flow.sign_out()
+    return resp
+
+
+def _valid_timezone(name: str) -> bool:
+    from zoneinfo import ZoneInfo
+
+    try:
+        ZoneInfo(name)
+    except (KeyError, ValueError, OSError):
+        return False
+    return True
+
+
 def _is_hex(value: str) -> bool:
     try:
         int(value, 16)
@@ -137,6 +201,7 @@ async def _status(request: web.Request) -> web.Response:
             "connected_ssid": state.connected_ssid,
             "has_internet": state.has_internet,
             "error": state.error,
+            "child_name": state.child_name,
             "networks": [n.__dict__ for n in state.networks],
         }
     )

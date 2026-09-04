@@ -4,6 +4,7 @@
 # Runtime state
 *.state.json
 *.identity.json
+*.credentials.json
 
 # Python
 .venv/

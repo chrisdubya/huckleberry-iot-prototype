@@ -19,7 +19,9 @@ uv sync
 cp .env.example .env   # then fill in your Huckleberry email/password
 ```
 
-Credentials live only in `.env`, which is gitignored.
+Credentials live only in `.env`, which is gitignored. On the Pi they can
+instead be entered from a phone at `http://huckdeck.local/`, which stores a
+refresh token rather than the password (see docs/pi-setup.md).
 
 ## Run
 
@@ -53,8 +55,9 @@ pulsing green = nursing in progress, fading red/green if both are active):
 
 - Parts list and wiring: [docs/hardware.md](docs/hardware.md)
 - Flash + provision + systemd service: [docs/pi-setup.md](docs/pi-setup.md)
-- No Wi-Fi configured? The deck runs a hotspot with a setup page
-  (pulsing blue LED); see "Setup mode" in the same doc
+- No Wi-Fi or login configured? The deck runs a hotspot with a setup page
+  (pulsing blue LED), then a Huckleberry sign-in page at `huckdeck.local`
+  (dim blue LED); see "Setup mode" in the same doc
 - 3D-printable case: [case/huckdeck_case.scad](case/huckdeck_case.scad)
   (parametric OpenSCAD; pre-rendered STLs alongside)
 

@@ -39,13 +39,27 @@ this repo, and runs `uv sync --extra pi`. It then stops and asks for `.env`.
 
 ## 3. Credentials
 
-From your Mac (never commit this file):
+Either sign in from a phone (the shipped-device path) or copy a `.env`.
+
+**From a phone:** re-run the provision script so it installs and starts
+the service, then open `http://huckdeck.local/` on the home Wi-Fi. The LED
+is dim blue while the deck waits. Enter the Huckleberry email and password;
+the deck checks them live, asks which child if the account has more than
+one, and starts. Only a Firebase refresh token is kept on the deck
+(`~/.huckdeck.credentials.json`, mode 600), never the password. The same
+page then shows the deck's status and a sign-out button.
+
+Accounts created with Apple or Google sign-in can't be used until a password
+is set in the Huckleberry app.
+
+**From your Mac** (developer path; never commit this file):
 
 ```sh
 scp .env pi@huckdeck.local:~/huckleberry-iot-prototype/.env
 ```
 
-Re-run the provision script; it installs and starts the systemd service.
+A `.env` takes precedence over a phone sign-in, and the page's sign-out
+button is hidden while one is present.
 
 ## 4. Verify
 
@@ -91,9 +105,10 @@ With no saved Wi-Fi network the service boots into **setup mode**:
    `http://huckdeck.local/` on the home network. Blinking red = the join
    failed; the hotspot comes back and the page shows why.
 
-Once on Wi-Fi the deck starts normally if `.env` exists. Until the
-Huckleberry sign-in page is built, it otherwise waits with a dim blue LED
-and the page reachable at `huckdeck.local`; add `.env` and restart.
+Once on Wi-Fi the deck starts if it has a login; otherwise the LED goes dim
+blue and `http://huckdeck.local/` shows the Huckleberry sign-in (step 3).
+If Huckleberry later rejects the saved token, the deck drops back to the
+sign-in page rather than crash-looping.
 
 How it works, and what the provision script installs for it:
 
