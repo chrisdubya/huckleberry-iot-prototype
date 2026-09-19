@@ -56,7 +56,7 @@ What the LED means (see `src/huckdeck/feedback/led.py`):
 | Dim green, 3s at startup | Service is up and running |
 | Off | Idle, no session in progress |
 | Double-blink in a button's color | That event logged (purple stands in for the black poop button) |
-| Slow pulsing red / green | Sleep / nursing session in progress |
+| Slow pulsing red / green | Sleep / nursing session in progress — including one started from the phone app |
 | Slow fade red↔green | Both sessions active at once (shouldn't happen) |
 | Fast red blink | Retrying a failed send |
 | Solid red, 5s | Event lost after all retries |

@@ -31,8 +31,14 @@ GPIO_BUTTONS = {"5": "pee", "6": "poo", "13": "both", "19": "bottle", "26": "sle
 
 
 class FakeClient:
+    """Stands in for HuckClient; `active` plays the server-side timer state."""
+
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.active = {"sleep": False, "nursing": False}
+
+    async def session_active(self, kind: str) -> bool:
+        return self.active[kind]
 
     async def log_diaper(self, mode: str, pressed_at: datetime) -> None:
         self.calls.append(f"diaper:{mode}")
@@ -42,15 +48,19 @@ class FakeClient:
 
     async def start_sleep(self) -> None:
         self.calls.append("sleep_start")
+        self.active["sleep"] = True
 
     async def complete_sleep(self) -> None:
         self.calls.append("sleep_stop")
+        self.active["sleep"] = False
 
     async def start_nursing(self) -> None:
         self.calls.append("nursing_start")
+        self.active["nursing"] = True
 
     async def complete_nursing(self) -> None:
         self.calls.append("nursing_stop")
+        self.active["nursing"] = False
 
 
 def press_pin(bcm: int) -> None:
@@ -92,6 +102,28 @@ async def main() -> None:
     await dispatcher.wait_idle()
     assert client.calls[-1] == "sleep_stop" and not dispatcher.sleep_active
 
+    # Sleep started from the app, and the push never reached us: the press
+    # must still stop it rather than start a second one.
+    client.active["sleep"] = True
+    press_pin(26)
+    await asyncio.sleep(0.15)
+    await dispatcher.wait_idle()
+    assert client.calls[-1] == "sleep_stop" and not dispatcher.sleep_active, client.calls
+
+    # Nursing stopped from the app (pushed): LED state follows with no press...
+    assert dispatcher.nursing_active
+    client.active["nursing"] = False
+    dispatcher.sync_remote("nursing", False)
+    assert not dispatcher.nursing_active and statuses[-1] == "remote", statuses
+    # ...and started again from the app: the next press stops it.
+    client.active["nursing"] = True
+    dispatcher.sync_remote("nursing", True)
+    assert dispatcher.nursing_active
+    press_pin(16)
+    await asyncio.sleep(0.15)
+    await dispatcher.wait_idle()
+    assert client.calls[-1] == "nursing_stop" and not dispatcher.nursing_active, client.calls
+
     # Retry blink survives the set_sessions() that follows every event...
     on_event("retrying", "pee", "simulated retry")
     await asyncio.sleep(0.05)
@@ -108,7 +140,7 @@ async def main() -> None:
     consumer.cancel()
     led.close()
     state.unlink(missing_ok=True)
-    print("mock GPIO test OK — 6 buttons, toggles, LED states all good")
+    print("mock GPIO test OK — 6 buttons, toggles, remote sync, LED states all good")
 
 
 if __name__ == "__main__":

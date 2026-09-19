@@ -28,7 +28,7 @@ EVENT_KEY_HELP = {
     "nursing_toggle": "nursing start/stop",
 }
 
-STATUS_PREFIX = {"sending": "⏳", "success": "✓", "retrying": "⚠", "failed": "✗"}
+STATUS_PREFIX = {"sending": "⏳", "success": "✓", "retrying": "⚠", "failed": "✗", "remote": "↻"}
 
 
 def _find_config() -> Path:
@@ -105,13 +105,23 @@ async def main(argv: list[str] | None = None) -> int:
                 print(f"  [{key}] {EVENT_KEY_HELP.get(event, event)}")
             print("  [q] quit\n")
 
+        # Follow sessions started/stopped from the app. Not fatal if it can't
+        # connect yet: keep_alive() retries, and presses pull the state anyway.
+        try:
+            await client.watch_sessions(dispatcher.sync_remote)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("Couldn't start session listeners yet", exc_info=True)
+
         consumer = asyncio.create_task(dispatcher.run())
+        keep_alive = asyncio.create_task(client.keep_alive())
         try:
             await input_module.run(dispatcher, buttons)
         finally:
             # Let queued sends finish before tearing down the session.
             await dispatcher.wait_idle()
             consumer.cancel()
+            keep_alive.cancel()
+            await client.close()
             led.close()
     print("Bye.")
     return 0

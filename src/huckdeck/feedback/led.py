@@ -5,6 +5,7 @@ Colors:
   off            — idle, no session in progress
   pulsing red    — a sleep session is in progress (fades in and out)
   pulsing green  — a nursing session is in progress (fades in and out)
+                   (either one may have been started from the phone app)
   red↔green      — both sessions somehow active at once: fade between colors
   color blinks   — event logged successfully: double blink in the pressed
                    button's color (yellow=pee, purple=poo since black isn't
@@ -131,8 +132,8 @@ class StatusLed:
                 self._retrying = False
                 self._led.color = RED
                 self._revert_after(5.0)
-            case "sending" | "ignored":
-                pass
+            case "sending" | "ignored" | "remote":
+                pass  # "remote" session changes reach the LED via set_sessions()
 
     def close(self) -> None:
         self._cancel_revert()

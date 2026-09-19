@@ -41,8 +41,15 @@ defaults):
 | q | Quit |
 
 Events are timestamped at the moment of the press and sent in the background
-with retries, so a WiFi hiccup doesn't lose or re-time anything. Sleep and
-nursing toggle state survives restarts (`~/.huckdeck.state.json`).
+with retries, so a WiFi hiccup doesn't lose or re-time anything.
+
+Sleep and nursing stay in sync with the Huckleberry app in both directions:
+the deck listens for timer changes, so a session started or stopped on a phone
+shows up here (and on the LED) within a second or two, and each toggle press
+checks the live timer before sending — so the button always stops a running
+session and starts one only when none is running, wherever it was started. The
+last known state is also cached in `~/.huckdeck.state.json` so the LED is right
+immediately after a restart.
 
 ## Physical device (Raspberry Pi Zero 2 W)
 
