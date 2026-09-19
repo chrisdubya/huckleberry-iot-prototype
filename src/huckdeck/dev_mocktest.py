@@ -124,10 +124,16 @@ async def main() -> None:
     await dispatcher.wait_idle()
     assert client.calls[-1] == "nursing_stop" and not dispatcher.nursing_active, client.calls
 
-    # LED failure states render without error
-    led.on_event("retrying", "pee", "simulated retry")
-    led.on_event("failed", "pee", "simulated loss")
+    # Retry blink survives the set_sessions() that follows every event...
+    on_event("retrying", "pee", "simulated retry")
+    await asyncio.sleep(0.05)
+    assert led._led._blink_thread is not None, "retry blink clobbered by set_sessions"
+    assert led._led.color == (1, 0, 0), led._led.color
+    # ...and is cleared by the final outcome
+    on_event("failed", "pee", "simulated loss")
     await asyncio.sleep(0.1)
+    assert led._led._blink_thread is None and led._led.color == (1, 0, 0)
+    assert not led._retrying
 
     os.kill(os.getpid(), signal.SIGTERM)  # gpio.run exits like a systemd stop
     await input_task

@@ -65,6 +65,7 @@ class StatusLed:
         self._sleep_active = False
         self._nursing_active = False
         self._revert_timer: threading.Timer | None = None
+        self._retrying = False  # retry blink showing; ends on success/failed
         self._led.color = DIM_GREEN  # "I'm running" — reverts to idle shortly
         self._revert_after(STARTUP_GREEN_SECONDS)
 
@@ -72,7 +73,7 @@ class StatusLed:
         """Called whenever sleep/nursing toggle state may have changed."""
         self._sleep_active = sleep_active
         self._nursing_active = nursing_active
-        if self._revert_timer is None:
+        if self._revert_timer is None and not self._retrying:
             self._show_idle()
 
     def _show_idle(self) -> None:
@@ -112,6 +113,7 @@ class StatusLed:
     def on_event(self, status: str, action: str, detail: str) -> None:
         match status:
             case "success":
+                self._retrying = False
                 self._led.blink(
                     on_time=SUCCESS_ON_SECONDS,
                     off_time=SUCCESS_OFF_SECONDS,
@@ -123,9 +125,11 @@ class StatusLed:
                     SUCCESS_BLINKS * (SUCCESS_ON_SECONDS + SUCCESS_OFF_SECONDS) + 0.05
                 )
             case "retrying":
+                self._retrying = True
                 self._cancel_revert()
                 self._led.blink(on_time=0.25, off_time=0.25, on_color=RED, off_color=OFF)
             case "failed":
+                self._retrying = False
                 self._led.color = RED
                 self._revert_after(5.0)
             case "sending" | "ignored" | "remote":
