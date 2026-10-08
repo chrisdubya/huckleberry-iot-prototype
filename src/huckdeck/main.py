@@ -78,6 +78,8 @@ async def main(argv: list[str] | None = None) -> int:
 
     display_config = config.get("display") or {}
     display_driver = args.display or display_config.get("driver", "none")
+    if display_driver == "oled" and args.display is None and input_mode != "gpio":
+        display_driver = "none"  # the panel is Pi hardware, like the buttons; keyboard runs skip it
     display = NullDisplay()
     sim_runner = None
     if display_driver == "sim":
