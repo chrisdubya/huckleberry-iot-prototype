@@ -53,14 +53,19 @@ class _GpiozeroPins:
 
 
 def open_device(dc_pin: int, rst_pin: int, brightness: int):
-    """The luma ssd1322 device on SPI0 CE0."""
+    """The luma ssd1322 device on SPI0 CE0, plus the pins to close after it.
+
+    luma only releases DC/RST itself when it created the GPIO object, so the
+    caller closes `pins` after device.cleanup().
+    """
     from luma.core.interface.serial import spi
     from luma.oled.device import ssd1322
 
-    serial = spi(port=0, device=0, gpio=_GpiozeroPins(), gpio_DC=dc_pin, gpio_RST=rst_pin)
+    pins = _GpiozeroPins()
+    serial = spi(port=0, device=0, gpio=pins, gpio_DC=dc_pin, gpio_RST=rst_pin)
     device = ssd1322(serial, mode="RGB")
     device.contrast(max(0, min(255, brightness)))
-    return device
+    return device, pins
 
 
 def show(device, frame) -> None:
@@ -72,7 +77,7 @@ class OledDisplay(Display):
 
     def __init__(self, dc_pin: int, rst_pin: int, brightness: int) -> None:
         super().__init__()
-        self._device = open_device(dc_pin, rst_pin, brightness)
+        self._device, self._pins = open_device(dc_pin, rst_pin, brightness)
         self._last: bytes | None = None
         self._task: asyncio.Task | None = None
 
@@ -102,3 +107,4 @@ class OledDisplay(Display):
         if self._task is not None:
             self._task.cancel()
         self._device.cleanup()
+        self._pins.cleanup()

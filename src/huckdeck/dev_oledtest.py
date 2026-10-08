@@ -23,7 +23,7 @@ def main() -> None:
     config = yaml.safe_load(_find_config().read_text())
     pins = config["gpio"]["display"]
     brightness = int((config.get("display") or {}).get("brightness", 80))
-    device = open_device(int(pins["dc"]), int(pins["rst"]), brightness)
+    device, gpio = open_device(int(pins["dc"]), int(pins["rst"]), brightness)
     print(f"Panel {device.width}x{device.height} up; showing {len(SCENES)} screens")
     try:
         for caption, state, overlay in SCENES:
@@ -32,6 +32,7 @@ def main() -> None:
             time.sleep(3)
     finally:
         device.cleanup()
+        gpio.cleanup()
 
 
 if __name__ == "__main__":
