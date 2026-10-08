@@ -530,6 +530,7 @@ pi = [
     { name = "gpiozero" },
     { name = "lgpio", marker = "sys_platform == 'linux'" },
     { name = "luma-oled", marker = "sys_platform == 'linux'" },
+    { name = "spidev", marker = "sys_platform == 'linux'" },
 ]
 
 [package.metadata]
@@ -541,6 +542,7 @@ requires-dist = [
     { name = "pillow", marker = "extra == 'display'", specifier = ">=12.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "spidev", marker = "sys_platform == 'linux' and extra == 'pi'", specifier = ">=3.6" },
 ]
 provides-extras = ["pi", "display"]
 
@@ -918,6 +920,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/87/37/b3f7b501502c4915b
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/f2/c78a68bd739ac8fc608747cff73a4db3b19f3135658ed4e64374f6425cbf/smbus2-0.6.1-py2.py3-none-any.whl", hash = "sha256:650feeb27ca0ed58b07db4c10201c2a662c41305b7bf6e5fab9d888056f48180", size = 11767, upload-time = "2026-04-09T20:37:53.728Z" },
 ]
+
+[[package]]
+name = "spidev"
+version = "3.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/87/039b6eeea781598015b538691bc174cc0bf77df9d4d2d3b8bf9245c0de8c/spidev-3.8.tar.gz", hash = "sha256:2bc02fb8c6312d519ebf1f4331067427c0921d3f77b8bcaf05189a2e8b8382c0", size = 13893, upload-time = "2025-09-15T18:56:20.672Z" }
 
 [[package]]
 name = "typing-extensions"
