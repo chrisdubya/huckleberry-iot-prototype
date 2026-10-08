@@ -94,6 +94,38 @@ Pin choices are remappable in `config.yaml` under `gpio:` — none of the
 defaults conflict with boot straps, I2C, SPI, or UART, so those buses stay
 free for future add-ons (e.g. an OLED on I2C).
 
+## Display (v2, in progress)
+
+3.12" 256x64 SSD1322 OLED module, yellow, "Ver 2.1" blue board (ACEIRMC
+2-pack on Amazon). Ships set to 8080 parallel; for 4-wire SPI the 0Ω jumpers
+on the back must be R5 + R8 (as built: R6's resistor removed, R5 bridged with
+solder, R8 left in place, R7 empty — the table is printed on the board).
+
+| Module pin | Signal | BCM GPIO | Physical pin |
+|------------|--------|----------|--------------|
+| 1 | GND | — | 6 |
+| 2 | VCC (3.3V) | — | 17 |
+| 4 | SCLK | GPIO11 | 23 |
+| 5 | SDIN (MOSI) | GPIO10 | 19 |
+| 14 | DC | GPIO24 | 18 |
+| 15 | RST | GPIO25 | 22 |
+| 16 | CS | GPIO8 (CE0) | 24 |
+
+Pins 6–13 unused. Pin 1 is at the "2 1" end of the header silkscreen; odd
+pins are one column, even the other. SPI must be enabled
+(`sudo raspi-config nonint do_spi 0`, then reboot). Pins remappable under
+`gpio: display:` in `config.yaml`.
+
+Measured for the case (calipers, as-built module):
+
+| Dimension | mm |
+|-----------|----|
+| Board | 100.7 × 33.4 |
+| Mounting holes | 4× Ø3.3 (M3), 94 × 28 centre-to-centre |
+| Glass | 1.5 from top/bottom edges, 5 from left edge, 6 from right (header) edge |
+| Lit pixel area | starts 10 from left edge, 4 from top edge; ~76.8 × 19.2 (nominal) |
+| Thickness | 6.4 board + glass; header pins add ~8.5 behind |
+
 ## Case (`case/huckdeck_case.scad`)
 
 Parametric OpenSCAD, two printed parts:
