@@ -21,6 +21,15 @@ debounce_seconds: 2
 # flag overrides this.
 input: keyboard
 
+# Ribbon display (256x64 SSD1322 OLED). driver: none, sim (browser preview at
+# http://localhost:<sim_port>/, needs `uv sync --extra display`) or oled (the
+# panel on the Pi's SPI0, pins under gpio: display:). The --display CLI flag
+# overrides the driver.
+display:
+  driver: none
+  sim_port: 8765
+  brightness: 80       # 0-255; keep it low for a nursery and for OLED life
+
 # Input key -> event. Events: pee, poo, both, bottle, sleep_toggle, nursing_toggle.
 buttons:
   "1": pee
@@ -43,3 +52,6 @@ gpio:
     red: 17
     green: 27
     blue: 22
+  display:        # SSD1322 on SPI0 CE0 (MOSI 10, SCLK 11, CS 8) plus:
+    dc: 24
+    rst: 25

@@ -29,6 +29,10 @@ SESSION_COLLECTIONS = {"sleep": "sleep", "nursing": "feed"}
 # on_change(kind, active), kind ∈ SESSION_COLLECTIONS; always called on the event loop.
 SessionCallback = Callable[[str, bool], None]
 
+# on_doc(collection, document) with the library's parsed root document for
+# "sleep", "feed" or "diaper"; always called on the event loop.
+DocCallback = Callable[[str, Any], None]
+
 
 class HuckClient:
     def __init__(
@@ -47,6 +51,8 @@ class HuckClient:
         self.child_name: str = ""
         self._fresh_lock = asyncio.Lock()
         self._on_session_change: SessionCallback | None = None
+        self._on_doc: DocCallback | None = None
+        self._listener_count = 0
 
     async def connect(self) -> None:
         """Authenticate and resolve which child to log against."""
@@ -89,38 +95,48 @@ class HuckClient:
         timer = (doc.to_dict() or {}).get("timer") if doc.exists else None
         return bool(timer and timer.get("active"))
 
-    async def watch_sessions(self, on_change: SessionCallback) -> None:
+    async def watch_sessions(self, on_change: SessionCallback, on_doc: DocCallback | None = None) -> None:
         """Stream sleep/nursing timer changes made anywhere (app, another deck).
 
         Fires once per timer with the current state as soon as the listener
-        connects, then on every change.
+        connects, then on every change. With on_doc, the full sleep, feed and
+        diaper documents are passed along too (for the display).
         """
         self._on_session_change = on_change
+        self._on_doc = on_doc
         await self._fresh()
         await self._start_listeners()
 
     async def _start_listeners(self) -> None:
         loop = asyncio.get_running_loop()
         on_change = self._on_session_change
+        on_doc = self._on_doc
         assert on_change is not None
 
-        def forward(kind: str) -> Callable[[Any], None]:
-            def on_doc(doc: Any) -> None:
+        def forward(collection: str, kind: str | None) -> Callable[[Any], None]:
+            def on_snapshot(doc: Any) -> None:
                 # Runs on a Firestore watch thread — hop back to the event loop.
-                active = bool(doc.timer and doc.timer.active)
                 try:
-                    loop.call_soon_threadsafe(on_change, kind, active)
+                    if kind is not None:
+                        active = bool(doc.timer and doc.timer.active)
+                        loop.call_soon_threadsafe(on_change, kind, active)
+                    if on_doc is not None:
+                        loop.call_soon_threadsafe(on_doc, collection, doc)
                 except RuntimeError:  # loop already closed during shutdown
                     pass
 
-            return on_doc
+            return on_snapshot
 
-        await self._api.setup_sleep_listener(self.child_uid, forward("sleep"))
-        await self._api.setup_feed_listener(self.child_uid, forward("nursing"))
+        await self._api.setup_sleep_listener(self.child_uid, forward("sleep", "sleep"))
+        await self._api.setup_feed_listener(self.child_uid, forward("feed", "nursing"))
+        self._listener_count = len(SESSION_COLLECTIONS)
+        if on_doc is not None:
+            await self._api.setup_diaper_listener(self.child_uid, forward("diaper", None))
+            self._listener_count += 1
 
     def _listeners_healthy(self) -> bool:
         watches = list(self._api._listeners.values())  # noqa: SLF001
-        return len(watches) == len(SESSION_COLLECTIONS) and all(
+        return len(watches) == self._listener_count and all(
             getattr(watch, "is_active", True) for watch in watches
         )
 

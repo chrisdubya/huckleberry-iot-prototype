@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 from .client import HuckClient
 from .dispatcher import Dispatcher
+from .feedback.display import NullDisplay
 from .feedback.led import NullStatusLed
 
 STATE_PATH = Path.home() / ".huckdeck.state.json"
@@ -48,6 +49,7 @@ def _print_status(status: str, action: str, detail: str) -> None:
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="huckdeck")
     parser.add_argument("--input", choices=["keyboard", "gpio"], help="override config.yaml input source")
+    parser.add_argument("--display", choices=["none", "sim", "oled"], help="override config.yaml display driver")
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -74,6 +76,25 @@ async def main(argv: list[str] | None = None) -> int:
         led = NullStatusLed()
         buttons = {str(k): v for k, v in config["buttons"].items()}
 
+    display_config = config.get("display") or {}
+    display_driver = args.display or display_config.get("driver", "none")
+    display = NullDisplay()
+    sim_runner = None
+    if display_driver == "sim":
+        from .feedback import display_sim
+        from .feedback.display import Display
+
+        display = Display()
+        sim_port = int(display_config.get("sim_port", 8765))
+        sim_runner = await display_sim.start(display, sim_port)
+        print(f"Display simulator: http://localhost:{sim_port}/")
+    elif display_driver == "oled":
+        from .feedback.display_oled import OledDisplay
+
+        pins = config["gpio"]["display"]
+        display = OledDisplay(int(pins["dc"]), int(pins["rst"]), int(display_config.get("brightness", 80)))
+        display.start()
+
     async with aiohttp.ClientSession() as websession:
         client = HuckClient(email, password, timezone, websession, config)
         print("Authenticating with Huckleberry…")
@@ -85,6 +106,7 @@ async def main(argv: list[str] | None = None) -> int:
         def on_event(status: str, action: str, detail: str) -> None:
             _print_status(status, action, detail)
             led.on_event(status, action, detail)
+            display.on_event(status, action, detail)
             if dispatcher is not None:
                 led.set_sessions(dispatcher.sleep_active, dispatcher.nursing_active)
 
@@ -108,7 +130,7 @@ async def main(argv: list[str] | None = None) -> int:
         # Follow sessions started/stopped from the app. Not fatal if it can't
         # connect yet: keep_alive() retries, and presses pull the state anyway.
         try:
-            await client.watch_sessions(dispatcher.sync_remote)
+            await client.watch_sessions(dispatcher.sync_remote, display.on_doc)
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).warning("Couldn't start session listeners yet", exc_info=True)
 
@@ -123,6 +145,9 @@ async def main(argv: list[str] | None = None) -> int:
             keep_alive.cancel()
             await client.close()
             led.close()
+            display.close()
+            if sim_runner is not None:
+                await sim_runner.cleanup()
     print("Bye.")
     return 0
 
