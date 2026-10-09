@@ -157,8 +157,11 @@ def build_base(coll):
     outer = rounded_rect_prism("base_v2", OUTER_X, DEPTH, CORNER_R, 0, REAR_H, cy=DEPTH / 2, coll=coll)
     # open top over the button section (the v1 top plate sits here)
     boolean(outer, box("cut_front_top", (-100, 100), (-1, HINGE_Y), (BASE_H, 200), coll=coll), "DIFFERENCE")
-    # the walls of the rear section end one plate thickness below the slope surface
-    boolean(outer, box("cut_slope", (-100, 100), (-20, 300), (PLATE_Z, 200), SLOPE, coll=coll), "DIFFERENCE")
+    # the walls of the rear section end one plate thickness below the slope
+    # surface; the cut starts at the hinge with a vertical face, like the plate
+    slope_cut = box("cut_slope", (-100, 100), (-20, 300), (PLATE_Z, 200), SLOPE, coll=coll)
+    boolean(slope_cut, box("cut_slope_clip", (-100, 100), (HINGE_Y, 400), (-50, 400), coll=coll), "INTERSECT")
+    boolean(outer, slope_cut, "DIFFERENCE")
     inner = rounded_rect_prism(
         "cavity", INNER_X, INNER_REAR_Y - WALL, CORNER_R - WALL, FLOOR_T, 200,
         cy=(WALL + INNER_REAR_Y) / 2, coll=coll,
