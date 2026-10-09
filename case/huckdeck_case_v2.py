@@ -62,8 +62,12 @@ DISP_PILOT_D = 2.6
 DISP_PILOT_INTO_PLATE = 2.5  # of the 3mm plate
 DISP_STANDOFF = 5.1    # rail height: glass stands ~4.8 above the PCB, +0.3 clearance
 LIT_X, LIT_Y = 76.8, 19.2             # lit pixel area (nominal)
-LIT_FROM_LEFT, LIT_FROM_TOP = 10, 4   # lit area offset on the PCB (measured)
-WINDOW_MARGIN = 1
+LIT_FROM_LEFT, LIT_FROM_TOP = 11, 4   # lit area offset on the PCB (10/4 measured; first print showed 1mm more on the left)
+WINDOW_MARGIN = 0.5
+# header on the right edge of the board (front-face solder joints sit in the
+# rail strip), measured along the board's height from its lower edge
+HEADER_SPAN = (5.9, 26.2)
+HEADER_CLEAR = 1.0
 WINDOW_R = 1.5
 RIB_NOTCH_W, RIB_NOTCH_H = 40, 25     # cable pass-through under the hinge rib
 PLATE_SCREW_X = 46                    # display plate corner screws: x (inside the corner radius), and up-slope positions
@@ -233,9 +237,15 @@ def build_display_plate(coll):
     boolean(plate, lip, "UNION")
     # OLED board: edge rails on the back, pilot holes through them into the plate, window
     board_y0, board_y1 = BOARD_CENTER_UP - BOARD_Y / 2, BOARD_CENTER_UP + BOARD_Y / 2
-    for sx in (-1, 1):
-        x_out, x_in = sx * (BOARD_X / 2 - RAIL_INSET), sx * (BOARD_X / 2 - RAIL_INSET - RAIL_W)
-        boolean(plate, box(f"disp_rail_{sx}", (min(x_out, x_in), max(x_out, x_in)), (board_y0 + 0.2, board_y1 - 0.2), (PLATE_Z - DISP_STANDOFF, PLATE_Z + 0.1), SLOPE, coll=coll), "UNION")
+    x_out, x_in = BOARD_X / 2 - RAIL_INSET, BOARD_X / 2 - RAIL_INSET - RAIL_W
+    # left: one full rail; right (header side): two pads either side of the header
+    spans = {
+        -1: [(board_y0 + 0.2, board_y1 - 0.2)],
+        1: [(board_y0 + 0.2, board_y0 + HEADER_SPAN[0] - HEADER_CLEAR), (board_y0 + HEADER_SPAN[1] + HEADER_CLEAR, board_y1 - 0.2)],
+    }
+    for sx, ranges in spans.items():
+        for i, (y0, y1) in enumerate(ranges):
+            boolean(plate, box(f"disp_rail_{sx}_{i}", (min(sx * x_out, sx * x_in), max(sx * x_out, sx * x_in)), (y0, y1), (PLATE_Z - DISP_STANDOFF, PLATE_Z + 0.1), SLOPE, coll=coll), "UNION")
     holes = [(hx * HOLE_DX / 2, BOARD_CENTER_UP + hy * HOLE_DY / 2) for hx in (-1, 1) for hy in (-1, 1)]
     boolean(plate, cylinders("disp_pilots", [(x, y, PLATE_Z - DISP_STANDOFF - 1, PLATE_Z + DISP_PILOT_INTO_PLATE, DISP_PILOT_D) for x, y in holes], SLOPE, coll=coll), "DIFFERENCE")
     window = rounded_rect_prism("window", WINDOW_X, WINDOW_Y, WINDOW_R, -10, 10, cx=WINDOW_DX, cy=BOARD_CENTER_UP + WINDOW_DY, coll=coll)
@@ -255,7 +265,9 @@ def build_reference(coll):
     pcb = box("ref_oled_pcb", (-BOARD_X / 2, BOARD_X / 2), (BOARD_CENTER_UP - BOARD_Y / 2, BOARD_CENTER_UP + BOARD_Y / 2), (pcb_z1 - 1.6, pcb_z1), SLOPE, coll=coll)
     glass = box("ref_oled_glass", (-BOARD_X / 2 + GLASS_FROM_LEFT, BOARD_X / 2 - GLASS_FROM_RIGHT), (BOARD_CENTER_UP - BOARD_Y / 2 + 1.5, BOARD_CENTER_UP + BOARD_Y / 2 - 1.5), (pcb_z1, pcb_z1 + 4.8), SLOPE, coll=coll)
     lit = box("ref_oled_lit", (WINDOW_DX - LIT_X / 2, WINDOW_DX + LIT_X / 2), (BOARD_CENTER_UP + WINDOW_DY - LIT_Y / 2, BOARD_CENTER_UP + WINDOW_DY + LIT_Y / 2), (pcb_z1 + 4.8, pcb_z1 + 4.9), SLOPE, coll=coll)
-    header = box("ref_oled_header", (BOARD_X / 2 - 8, BOARD_X / 2 - 2), (BOARD_CENTER_UP - 9, BOARD_CENTER_UP + 9), (pcb_z1 - 1.6 - 17.5, pcb_z1 - 1.6), SLOPE, coll=coll)
+    header = box("ref_oled_header", (BOARD_X / 2 - 4.8, BOARD_X / 2 - 0.2), (BOARD_CENTER_UP - BOARD_Y / 2 + HEADER_SPAN[0], BOARD_CENTER_UP - BOARD_Y / 2 + HEADER_SPAN[1]), (pcb_z1 - 1.6 - 17.5, pcb_z1 - 1.6), SLOPE, coll=coll)
+    # its solder joints on the front face
+    joints = box("ref_oled_joints", (BOARD_X / 2 - 4.8, BOARD_X / 2 - 0.2), (BOARD_CENTER_UP - BOARD_Y / 2 + HEADER_SPAN[0], BOARD_CENTER_UP - BOARD_Y / 2 + HEADER_SPAN[1]), (pcb_z1, pcb_z1 + 1.2), SLOPE, coll=coll)
     # Pi Zero 2 W with its GPIO header + jumper housings
     pi_cy = INNER_REAR_Y - 1 - PI_W / 2
     pi_z0 = FLOOR_T + PI_POST_H
@@ -269,7 +281,7 @@ def build_reference(coll):
         [((cx - 1) * 36, front_cy + (cy - 0.5) * 36, HINGE_Z, HINGE_Z + 9, 28) for cx in range(3) for cy in range(2)],
         coll=coll,
     )
-    return [pcb, glass, lit, header, pi, pi_header, plate, buttons]
+    return [pcb, glass, lit, header, joints, pi, pi_header, plate, buttons]
 
 
 def build():
