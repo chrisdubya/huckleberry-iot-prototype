@@ -191,8 +191,9 @@ def build_base(coll):
     plate_screws = [(sx * PLATE_SCREW_X, y) for sx in (-1, 1) for y in PLATE_SCREW_Y]
     boolean(outer, cylinders("plate_bosses", [(x, y, PLATE_Z - 7, PLATE_Z - 0.05, SCREW_BOSS_D) for x, y in plate_screws], SLOPE, coll=coll), "UNION")
     boolean(outer, cylinders("plate_pilots", [(x, y, PLATE_Z - 7.5, PLATE_Z + 1, CASE_PILOT_D) for x, y in plate_screws], SLOPE, coll=coll), "DIFFERENCE")
-    # anything that poked outside the shell (boss ends inside the rear wall)
-    boolean(outer, box("trim_rear", (-100, 100), (DEPTH, DEPTH + 50), (-10, 200), coll=coll), "DIFFERENCE")
+    # the rear bosses end inside the rear wall; clip whatever pokes out of the
+    # footprint at the rounded corners
+    boolean(outer, rounded_rect_prism("footprint_clip", OUTER_X, DEPTH, CORNER_R, -1, 200, cy=DEPTH / 2, coll=coll), "INTERSECT")
 
     # Pi under the display tier, ports 1mm from the rear wall
     pi_cy = INNER_REAR_Y - 1 - PI_W / 2
