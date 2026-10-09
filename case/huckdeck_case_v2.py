@@ -48,11 +48,19 @@ TILT_DEG = 30          # display face angle from horizontal
 SLOPE_LEN = 56         # length of the display face along the slope
 PLATE_T = 3            # display plate thickness (same as the v1 top plate)
 BOARD_X, BOARD_Y = 100.7, 33.4        # OLED module PCB (measured)
-HOLE_DX, HOLE_DY = 94, 28             # its M3 mounting holes (measured)
+HOLE_D = 3.28                          # its M3 mounting holes (measured)
+HOLE_DX, HOLE_DY = 98 - HOLE_D, 32 - HOLE_D   # centre-to-centre, from outer-edge-to-outer-edge measurements
+GLASS_FROM_LEFT, GLASS_FROM_RIGHT = 4.66, 6.0  # panel edge from the PCB edge; the holes sit just outside it
 BOARD_CENTER_UP = 24   # board centre, measured up the slope from the hinge
-DISP_BOSS_D = 5.5      # the panel's corner notches only clear an M3 screw head
-DISP_PILOT_D = 2.5
-DISP_STANDOFF = 5.1    # boss height: glass stands ~4.8 above the PCB, +0.3 clearance
+# The board sits on two rails running along its short edges, in the strip
+# between the PCB edge and the panel (the holes are only 3mm from the edge, so
+# a round boss would hit the panel). M3 x 8 screws pass through the PCB and
+# the rail and thread into the plate itself.
+RAIL_W = 4.0           # rail width: PCB edge + 0.3 .. + 4.3, inside the 4.66 panel margin
+RAIL_INSET = 0.3
+DISP_PILOT_D = 2.6
+DISP_PILOT_INTO_PLATE = 2.5  # of the 3mm plate
+DISP_STANDOFF = 5.1    # rail height: glass stands ~4.8 above the PCB, +0.3 clearance
 LIT_X, LIT_Y = 76.8, 19.2             # lit pixel area (nominal)
 LIT_FROM_LEFT, LIT_FROM_TOP = 10, 4   # lit area offset on the PCB (measured)
 WINDOW_MARGIN = 1
@@ -223,10 +231,13 @@ def build_display_plate(coll):
     lip = box("lip_rear", (-100, 100), (-20, 100), (PLATE_Z - LIP_H, PLATE_Z + 0.1), SLOPE, coll=coll)
     boolean(lip, box("lip_rear_clip", (-lip_x, lip_x), (INNER_REAR_Y - 0.2 - WALL, INNER_REAR_Y - 0.2), (-50, 200), coll=coll), "INTERSECT")
     boolean(plate, lip, "UNION")
-    # OLED board: bosses on the back, pilot holes, window
+    # OLED board: edge rails on the back, pilot holes through them into the plate, window
+    board_y0, board_y1 = BOARD_CENTER_UP - BOARD_Y / 2, BOARD_CENTER_UP + BOARD_Y / 2
+    for sx in (-1, 1):
+        x_out, x_in = sx * (BOARD_X / 2 - RAIL_INSET), sx * (BOARD_X / 2 - RAIL_INSET - RAIL_W)
+        boolean(plate, box(f"disp_rail_{sx}", (min(x_out, x_in), max(x_out, x_in)), (board_y0 + 0.2, board_y1 - 0.2), (PLATE_Z - DISP_STANDOFF, PLATE_Z + 0.1), SLOPE, coll=coll), "UNION")
     holes = [(hx * HOLE_DX / 2, BOARD_CENTER_UP + hy * HOLE_DY / 2) for hx in (-1, 1) for hy in (-1, 1)]
-    boolean(plate, cylinders("disp_bosses", [(x, y, PLATE_Z - DISP_STANDOFF, PLATE_Z + 0.1, DISP_BOSS_D) for x, y in holes], SLOPE, coll=coll), "UNION")
-    boolean(plate, cylinders("disp_pilots", [(x, y, PLATE_Z - DISP_STANDOFF - 1, -1.0, DISP_PILOT_D) for x, y in holes], SLOPE, coll=coll), "DIFFERENCE")
+    boolean(plate, cylinders("disp_pilots", [(x, y, PLATE_Z - DISP_STANDOFF - 1, PLATE_Z + DISP_PILOT_INTO_PLATE, DISP_PILOT_D) for x, y in holes], SLOPE, coll=coll), "DIFFERENCE")
     window = rounded_rect_prism("window", WINDOW_X, WINDOW_Y, WINDOW_R, -10, 10, cx=WINDOW_DX, cy=BOARD_CENTER_UP + WINDOW_DY, coll=coll)
     window.data.transform(SLOPE)
     boolean(plate, window, "DIFFERENCE")
@@ -242,11 +253,7 @@ def build_reference(coll):
     # OLED module: PCB + raised glass, on the bosses
     pcb_z1 = PLATE_Z - DISP_STANDOFF
     pcb = box("ref_oled_pcb", (-BOARD_X / 2, BOARD_X / 2), (BOARD_CENTER_UP - BOARD_Y / 2, BOARD_CENTER_UP + BOARD_Y / 2), (pcb_z1 - 1.6, pcb_z1), SLOPE, coll=coll)
-    glass = box("ref_oled_glass", (-BOARD_X / 2 + 5, BOARD_X / 2 - 6), (BOARD_CENTER_UP - BOARD_Y / 2 + 1.5, BOARD_CENTER_UP + BOARD_Y / 2 - 1.5), (pcb_z1, pcb_z1 + 4.8), SLOPE, coll=coll)
-    for hx in (-1, 1):  # the panel's corners are notched around the mounting holes
-        for hy in (-1, 1):
-            cx, cy = hx * HOLE_DX / 2, BOARD_CENTER_UP + hy * HOLE_DY / 2
-            boolean(glass, box("notch", (cx - 3.5, cx + 3.5), (cy - 3.5, cy + 3.5), (pcb_z1 - 1, pcb_z1 + 6), SLOPE, coll=coll), "DIFFERENCE")
+    glass = box("ref_oled_glass", (-BOARD_X / 2 + GLASS_FROM_LEFT, BOARD_X / 2 - GLASS_FROM_RIGHT), (BOARD_CENTER_UP - BOARD_Y / 2 + 1.5, BOARD_CENTER_UP + BOARD_Y / 2 - 1.5), (pcb_z1, pcb_z1 + 4.8), SLOPE, coll=coll)
     lit = box("ref_oled_lit", (WINDOW_DX - LIT_X / 2, WINDOW_DX + LIT_X / 2), (BOARD_CENTER_UP + WINDOW_DY - LIT_Y / 2, BOARD_CENTER_UP + WINDOW_DY + LIT_Y / 2), (pcb_z1 + 4.8, pcb_z1 + 4.9), SLOPE, coll=coll)
     header = box("ref_oled_header", (BOARD_X / 2 - 8, BOARD_X / 2 - 2), (BOARD_CENTER_UP - 9, BOARD_CENTER_UP + 9), (pcb_z1 - 1.6 - 17.5, pcb_z1 - 1.6), SLOPE, coll=coll)
     # Pi Zero 2 W with its GPIO header + jumper housings

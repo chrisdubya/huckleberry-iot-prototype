@@ -121,8 +121,8 @@ Measured for the case (calipers, as-built module):
 | Dimension | mm |
 |-----------|----|
 | Board | 100.7 × 33.4 |
-| Mounting holes | 4× Ø3.3 (M3), 94 × 28 centre-to-centre |
-| Glass | 1.5 from top/bottom edges, 5 from left edge, 6 from right (header) edge |
+| Mounting holes | 4× Ø3.28 (M3), 94.7 × 28.7 centre-to-centre (98 × 32 outer edge to outer edge); centres 3.0 from the ends, 2.35 from the long edges |
+| Glass | 1.5 from top/bottom edges, 4.66 from left edge, 6 from right (header) edge — the holes sit just outside it, so nothing wider than the hole fits around them on the panel side |
 | Lit pixel area | starts 10 from left edge, 4 from top edge; ~76.8 × 19.2 (nominal) |
 | Thickness | 6.4 board + glass; header pins add ~8.5 behind |
 
