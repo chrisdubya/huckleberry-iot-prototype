@@ -58,8 +58,9 @@ LIT_FROM_LEFT, LIT_FROM_TOP = 10, 4   # lit area offset on the PCB (measured)
 WINDOW_MARGIN = 1
 WINDOW_R = 1.5
 RIB_NOTCH_W, RIB_NOTCH_H = 40, 25     # cable pass-through under the hinge rib
-PLATE_SCREW_X = 50                    # display plate corner screws: x, and up-slope positions
-PLATE_SCREW_Y = (3.5, 49)
+PLATE_SCREW_X = 46                    # display plate corner screws: x (inside the corner radius), and up-slope positions
+PLATE_SCREW_Y = (3.5, 47)
+PLATE_BOSS_H = 5       # below the plate; M3 x 6 screws
 SCREW_D, SCREW_HEAD_D, SCREW_HEAD_H = 3.4, 6.0, 2.0  # M3 clearance + counterbore (v1 values)
 LIP_H = 3.5
 RIB_Y1 = 80            # hinge rib spans from the front section's back wall to here
@@ -186,14 +187,19 @@ def build_base(coll):
     boolean(outer, cylinders("lid_bosses", [(x, y, FLOOR_T - 0.1, boss_top, SCREW_BOSS_D) for x, y in corners], coll=coll), "UNION")
     boolean(outer, cylinders("lid_pilots", [(x, y, boss_top - 10, boss_top + 1, CASE_PILOT_D) for x, y in corners], coll=coll), "DIFFERENCE")
 
-    # display plate screw bosses: under the plate, merged into the side walls,
-    # the rib (front pair) and the rear wall (rear pair)
+    # display plate screw bosses under the plate: the front pair are cylinders
+    # merged into the hinge rib; the rear pair are solid gussets filling the
+    # corner between the plate and the rear wall (a cylinder there would only
+    # touch the wall with its tip)
+    r = SCREW_BOSS_D / 2
+    boss_z = (PLATE_Z - PLATE_BOSS_H, PLATE_Z - 0.05)
+    boolean(outer, cylinders("plate_bosses_front", [(sx * PLATE_SCREW_X, PLATE_SCREW_Y[0], *boss_z, SCREW_BOSS_D) for sx in (-1, 1)], SLOPE, coll=coll), "UNION")
+    for sx in (-1, 1):
+        gusset = box(f"plate_gusset_{sx}", (sx * PLATE_SCREW_X - r, sx * PLATE_SCREW_X + r), (PLATE_SCREW_Y[1] - r, SLOPE_LEN + 10), boss_z, SLOPE, coll=coll)
+        boolean(gusset, box("gusset_clip", (-INNER_X / 2, INNER_X / 2), (0, DEPTH - 0.6), (0, 200), coll=coll), "INTERSECT")
+        boolean(outer, gusset, "UNION")
     plate_screws = [(sx * PLATE_SCREW_X, y) for sx in (-1, 1) for y in PLATE_SCREW_Y]
-    boolean(outer, cylinders("plate_bosses", [(x, y, PLATE_Z - 7, PLATE_Z - 0.05, SCREW_BOSS_D) for x, y in plate_screws], SLOPE, coll=coll), "UNION")
-    boolean(outer, cylinders("plate_pilots", [(x, y, PLATE_Z - 7.5, PLATE_Z + 1, CASE_PILOT_D) for x, y in plate_screws], SLOPE, coll=coll), "DIFFERENCE")
-    # the rear bosses end inside the rear wall; clip whatever pokes out of the
-    # footprint at the rounded corners
-    boolean(outer, rounded_rect_prism("footprint_clip", OUTER_X, DEPTH, CORNER_R, -1, 200, cy=DEPTH / 2, coll=coll), "INTERSECT")
+    boolean(outer, cylinders("plate_pilots", [(x, y, PLATE_Z - PLATE_BOSS_H - 0.3, PLATE_Z + 1, CASE_PILOT_D) for x, y in plate_screws], SLOPE, coll=coll), "DIFFERENCE")
 
     # Pi under the display tier, ports 1mm from the rear wall
     pi_cy = INNER_REAR_Y - 1 - PI_W / 2
@@ -213,7 +219,7 @@ def build_display_plate(coll):
     boolean(plate, box("hinge_cut", (-100, 100), (-50, HINGE_Y), (-50, 200), coll=coll), "DIFFERENCE")
     # registration lip inside the rear wall (the hinge end butts the top plate,
     # the sides are located by the screws; a front lip would hit the board)
-    lip_x = INNER_X / 2 - 8
+    lip_x = PLATE_SCREW_X - SCREW_BOSS_D / 2 - 1.5  # clear of the plate bosses
     lip = box("lip_rear", (-100, 100), (-20, 100), (PLATE_Z - LIP_H, PLATE_Z + 0.1), SLOPE, coll=coll)
     boolean(lip, box("lip_rear_clip", (-lip_x, lip_x), (INNER_REAR_Y - 0.2 - WALL, INNER_REAR_Y - 0.2), (-50, 200), coll=coll), "INTERSECT")
     boolean(plate, lip, "UNION")
