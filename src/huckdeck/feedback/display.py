@@ -251,7 +251,11 @@ def _draw_overlay(draw, overlay: Overlay) -> None:
 
 
 def ticker_items(state: DeckState, now: float) -> list[list[tuple[str, int]]]:
-    """The ticker's items, each a list of (text, fill) runs: dim labels, bright values."""
+    """The ticker's items, each a list of (text, fill) runs: dim labels, bright values.
+
+    Grouped by kind: the diaper group (latest, then today's total), then the
+    nursing group (latest, then today's total).
+    """
     items: list[list[tuple[str, int]]] = []
     if state.last_diaper_start is not None:
         ago = format_ago(now - state.last_diaper_start)
@@ -260,6 +264,10 @@ def ticker_items(state: DeckState, now: float) -> list[list[tuple[str, int]]]:
     else:
         items.append([(f"{DIAPER_EMOJI['both']} ", DIM), ("--", BRIGHT)])
 
+    if state.diapers_today is not None:
+        items.append([("TODAY ", DIM), (str(state.diapers_today), BRIGHT), (f" {DIAPER_EMOJI['both']}", DIM)])
+
+    # then the nursing group: latest, then today's total
     if state.last_feed_start is not None:
         ago = format_ago(now - state.last_feed_start)
         icon = BOTTLE_EMOJI if state.last_feed_kind == "bottle" else NURSING_EMOJI
@@ -267,9 +275,6 @@ def ticker_items(state: DeckState, now: float) -> list[list[tuple[str, int]]]:
         items.append([(f"{icon} {detail}", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
     else:
         items.append([(f"{NURSING_EMOJI} ", DIM), ("--", BRIGHT)])
-
-    if state.diapers_today is not None:
-        items.append([("TODAY ", DIM), (str(state.diapers_today), BRIGHT), (f" {DIAPER_EMOJI['both']}", DIM)])
     if state.nursing_count_today is not None:
         n = state.nursing_count_today
         items.append([(f"TODAY {NURSING_EMOJI} ", DIM), (format_hours(state.nursing_seconds_today), BRIGHT), (", ", DIM), (str(n), BRIGHT), (" FEED" + ("" if n == 1 else "S"), DIM)])
