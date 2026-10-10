@@ -21,6 +21,21 @@ debounce_seconds: 2
 # flag overrides this.
 input: keyboard
 
+# Ribbon display (256x64 SSD1322 OLED). driver: none, sim (browser preview at
+# http://localhost:<sim_port>/, needs `uv sync --extra display`) or oled (the
+# panel on the Pi's SPI0, pins under gpio: display:; only used with gpio
+# input, so keyboard runs on a laptop ignore it). The --display CLI flag
+# overrides the driver.
+display:
+  driver: oled
+  sim_port: 8765
+  mode: ticker           # ticker (scrolling line) or panes (static layout)
+  brightness: 80         # 0-255, for dim_after_seconds after a button press
+  dim_brightness: 20     # 0-255, the rest of the time
+  dim_after_seconds: 60
+  ticker_speed: 34       # pixels per second
+  day_starts_at: 8       # today's totals count from 8am to 8am
+
 # Input key -> event. Events: pee, poo, both, bottle, sleep_toggle, nursing_toggle.
 buttons:
   "1": pee
@@ -43,3 +58,6 @@ gpio:
     red: 17
     green: 27
     blue: 22
+  display:        # SSD1322 on SPI0 CE0 (MOSI 10, SCLK 11, CS 8) plus:
+    dc: 24
+    rst: 25

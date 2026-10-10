@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import aiohttp
@@ -15,6 +16,7 @@ from dotenv import load_dotenv
 
 from .client import HuckClient
 from .dispatcher import Dispatcher
+from .feedback.display import NullDisplay
 from .feedback.led import NullStatusLed
 
 STATE_PATH = Path.home() / ".huckdeck.state.json"
@@ -48,6 +50,7 @@ def _print_status(status: str, action: str, detail: str) -> None:
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="huckdeck")
     parser.add_argument("--input", choices=["keyboard", "gpio"], help="override config.yaml input source")
+    parser.add_argument("--display", choices=["none", "sim", "oled"], help="override config.yaml display driver")
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -74,6 +77,35 @@ async def main(argv: list[str] | None = None) -> int:
         led = NullStatusLed()
         buttons = {str(k): v for k, v in config["buttons"].items()}
 
+    display_config = config.get("display") or {}
+    display_driver = args.display or display_config.get("driver", "none")
+    if display_driver == "oled" and args.display is None and input_mode != "gpio":
+        display_driver = "none"  # the panel is Pi hardware, like the buttons; keyboard runs skip it
+    display = NullDisplay()
+    sim_runner = None
+    display_options = {
+        "mode": display_config.get("mode", "ticker"),
+        "brightness": int(display_config.get("brightness", 80)),
+        "dim_brightness": int(display_config.get("dim_brightness", 20)),
+        "dim_after_seconds": float(display_config.get("dim_after_seconds", 60)),
+        "ticker_speed": float(display_config.get("ticker_speed", 24)),
+    }
+    day_start_hour = int(display_config.get("day_starts_at", 8))
+    if display_driver == "sim":
+        from .feedback import display_sim
+        from .feedback.display import Display
+
+        display = Display(**display_options)
+        sim_port = int(display_config.get("sim_port", 8765))
+        sim_runner = await display_sim.start(display, sim_port)
+        print(f"Display simulator: http://localhost:{sim_port}/")
+    elif display_driver == "oled":
+        from .feedback.display_oled import OledDisplay
+
+        pins = config["gpio"]["display"]
+        display = OledDisplay(int(pins["dc"]), int(pins["rst"]), **display_options)
+        display.start()
+
     async with aiohttp.ClientSession() as websession:
         client = HuckClient(email, password, timezone, websession, config)
         print("Authenticating with Huckleberry…")
@@ -81,12 +113,21 @@ async def main(argv: list[str] | None = None) -> int:
         print(f"Connected. Logging events for: {client.child_name}\n")
 
         dispatcher: Dispatcher | None = None
+        totals_due = asyncio.Event()  # set whenever today's counts may have changed
 
         def on_event(status: str, action: str, detail: str) -> None:
             _print_status(status, action, detail)
             led.on_event(status, action, detail)
+            display.on_event(status, action, detail)
+            if status in ("success", "remote"):
+                totals_due.set()
             if dispatcher is not None:
                 led.set_sessions(dispatcher.sleep_active, dispatcher.nursing_active)
+
+        def on_doc(collection: str, doc: object) -> None:
+            display.on_doc(collection, doc)
+            if collection in ("diaper", "feed"):
+                totals_due.set()  # a change made in the app
 
         dispatcher = Dispatcher(
             client=client,
@@ -108,12 +149,13 @@ async def main(argv: list[str] | None = None) -> int:
         # Follow sessions started/stopped from the app. Not fatal if it can't
         # connect yet: keep_alive() retries, and presses pull the state anyway.
         try:
-            await client.watch_sessions(dispatcher.sync_remote)
+            await client.watch_sessions(dispatcher.sync_remote, on_doc)
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).warning("Couldn't start session listeners yet", exc_info=True)
 
         consumer = asyncio.create_task(dispatcher.run())
         keep_alive = asyncio.create_task(client.keep_alive())
+        totals = asyncio.create_task(_refresh_totals(client, display, day_start_hour, totals_due)) if not isinstance(display, NullDisplay) else None
         try:
             await input_module.run(dispatcher, buttons)
         finally:
@@ -121,10 +163,45 @@ async def main(argv: list[str] | None = None) -> int:
             await dispatcher.wait_idle()
             consumer.cancel()
             keep_alive.cancel()
+            if totals is not None:
+                totals.cancel()
             await client.close()
             led.close()
+            display.close()
+            if sim_runner is not None:
+                await sim_runner.cleanup()
     print("Bye.")
     return 0
+
+
+TOTALS_REFRESH_SECONDS = 600  # also re-pull on a timer, and at the 8am rollover
+
+
+async def _refresh_totals(client: HuckClient, display, day_start_hour: int, due: asyncio.Event) -> None:
+    """Keep the display's daily counts current: on demand, on a timer, and when the day rolls over."""
+    from .client import day_start as _day_start
+
+    last_day = None
+    due.set()
+    while True:
+        try:
+            await asyncio.wait_for(due.wait(), timeout=TOTALS_REFRESH_SECONDS)
+        except TimeoutError:
+            pass
+        due.clear()
+        try:
+            await asyncio.sleep(2)  # let Huckleberry finish writing the interval we just logged
+            totals = await client.day_totals(day_start_hour)
+            display.set_totals(totals.diapers, totals.nursing_count, totals.nursing_seconds)
+            last_day = totals.day_start
+        except Exception:  # noqa: BLE001 — offline etc.; the old counts stay up
+            logging.getLogger(__name__).warning("Couldn't refresh daily totals", exc_info=True)
+        # wake at the next rollover so the counts reset on time
+        if last_day is not None:
+            loop = asyncio.get_running_loop()
+            seconds_to_rollover = (last_day.timestamp() + 86400) - time.time()
+            if 0 < seconds_to_rollover < TOTALS_REFRESH_SECONDS:
+                loop.call_later(seconds_to_rollover + 1, due.set)
 
 
 def run() -> None:

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from huckleberry_api import HuckleberryAPI
@@ -30,6 +32,28 @@ SESSION_COLLECTIONS = {"sleep": "sleep", "nursing": "feed"}
 SessionCallback = Callable[[str, bool], None]
 
 
+@dataclass
+class DayTotals:
+    """Counts since the start of the current "day" (which starts at day_start_hour)."""
+
+    day_start: datetime
+    diapers: int
+    nursing_count: int
+    nursing_seconds: float
+
+
+def day_start(now: datetime, day_start_hour: int) -> datetime:
+    """The most recent day_start_hour o'clock at or before `now`."""
+    start = now.replace(hour=day_start_hour, minute=0, second=0, microsecond=0)
+    if start > now:
+        start -= timedelta(days=1)
+    return start
+
+# on_doc(collection, document) with the library's parsed root document for
+# "sleep", "feed" or "diaper"; always called on the event loop.
+DocCallback = Callable[[str, Any], None]
+
+
 class HuckClient:
     def __init__(
         self,
@@ -43,10 +67,13 @@ class HuckClient:
             email=email, password=password, timezone=timezone, websession=websession
         )
         self._config = config
+        self._tz = ZoneInfo(timezone)
         self.child_uid: str = ""
         self.child_name: str = ""
         self._fresh_lock = asyncio.Lock()
         self._on_session_change: SessionCallback | None = None
+        self._on_doc: DocCallback | None = None
+        self._listener_count = 0
 
     async def connect(self) -> None:
         """Authenticate and resolve which child to log against."""
@@ -89,38 +116,48 @@ class HuckClient:
         timer = (doc.to_dict() or {}).get("timer") if doc.exists else None
         return bool(timer and timer.get("active"))
 
-    async def watch_sessions(self, on_change: SessionCallback) -> None:
+    async def watch_sessions(self, on_change: SessionCallback, on_doc: DocCallback | None = None) -> None:
         """Stream sleep/nursing timer changes made anywhere (app, another deck).
 
         Fires once per timer with the current state as soon as the listener
-        connects, then on every change.
+        connects, then on every change. With on_doc, the full sleep, feed and
+        diaper documents are passed along too (for the display).
         """
         self._on_session_change = on_change
+        self._on_doc = on_doc
         await self._fresh()
         await self._start_listeners()
 
     async def _start_listeners(self) -> None:
         loop = asyncio.get_running_loop()
         on_change = self._on_session_change
+        on_doc = self._on_doc
         assert on_change is not None
 
-        def forward(kind: str) -> Callable[[Any], None]:
-            def on_doc(doc: Any) -> None:
+        def forward(collection: str, kind: str | None) -> Callable[[Any], None]:
+            def on_snapshot(doc: Any) -> None:
                 # Runs on a Firestore watch thread — hop back to the event loop.
-                active = bool(doc.timer and doc.timer.active)
                 try:
-                    loop.call_soon_threadsafe(on_change, kind, active)
+                    if kind is not None:
+                        active = bool(doc.timer and doc.timer.active)
+                        loop.call_soon_threadsafe(on_change, kind, active)
+                    if on_doc is not None:
+                        loop.call_soon_threadsafe(on_doc, collection, doc)
                 except RuntimeError:  # loop already closed during shutdown
                     pass
 
-            return on_doc
+            return on_snapshot
 
-        await self._api.setup_sleep_listener(self.child_uid, forward("sleep"))
-        await self._api.setup_feed_listener(self.child_uid, forward("nursing"))
+        await self._api.setup_sleep_listener(self.child_uid, forward("sleep", "sleep"))
+        await self._api.setup_feed_listener(self.child_uid, forward("feed", "nursing"))
+        self._listener_count = len(SESSION_COLLECTIONS)
+        if on_doc is not None:
+            await self._api.setup_diaper_listener(self.child_uid, forward("diaper", None))
+            self._listener_count += 1
 
     def _listeners_healthy(self) -> bool:
         watches = list(self._api._listeners.values())  # noqa: SLF001
-        return len(watches) == len(SESSION_COLLECTIONS) and all(
+        return len(watches) == self._listener_count and all(
             getattr(watch, "is_active", True) for watch in watches
         )
 
@@ -141,6 +178,17 @@ class HuckClient:
                     await self._start_listeners()
             except Exception:  # noqa: BLE001 — offline etc.; try again next tick
                 _LOGGER.warning("Keep-alive tick failed; will retry", exc_info=True)
+
+    async def day_totals(self, day_start_hour: int) -> DayTotals:
+        """Diapers and nursing logged since day_start_hour o'clock (local time)."""
+        now = datetime.now(self._tz)
+        start = day_start(now, day_start_hour)
+        await self._fresh()
+        diapers = await self._api.list_diaper_intervals(self.child_uid, start, now)
+        feeds = await self._api.list_feed_intervals(self.child_uid, start, now)
+        nursing = [f for f in feeds if getattr(f, "mode", None) == "breast"]
+        seconds = sum(float(getattr(f, "leftDuration", 0) or 0) + float(getattr(f, "rightDuration", 0) or 0) for f in nursing)
+        return DayTotals(start, len(diapers), len(nursing), seconds)
 
     async def close(self) -> None:
         await self._api.stop_all_listeners()
