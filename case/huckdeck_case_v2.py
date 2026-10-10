@@ -8,6 +8,8 @@ Parts (all printed; the v1 top plate is reused unchanged):
   base_v2          — the enclosure: button section in front (takes the v1 top
                      plate), open sloped section behind for the display plate,
                      rear power slot, Pi posts, screw bosses for both plates.
+                     The hinge rib between the sections is open across the
+                     middle, so the wired-up board just lays in.
   display_plate_v2 — the 30° face: window, four bosses on its back for the OLED
                      board, four counterbored corner holes. Assemble it on the
                      bench (board screwed to the plate from behind), then drop
@@ -69,7 +71,8 @@ WINDOW_MARGIN = 0.5
 HEADER_SPAN = (5.9, 26.2)
 HEADER_CLEAR = 1.0
 WINDOW_R = 1.5
-RIB_NOTCH_W, RIB_NOTCH_H = 40, 25     # cable pass-through under the hinge rib
+RIB_OPENING_W = 82     # the hinge rib is open across the middle (floor to top); only
+                       # stubs remain at the ends, carrying the screw bosses
 PLATE_SCREW_X = 46                    # display plate corner screws: x (inside the corner radius), and up-slope positions
 PLATE_SCREW_Y = (3.5, 47)
 PLATE_BOSS_H = 5       # below the plate; M3 x 6 screws
@@ -187,7 +190,7 @@ def build_base(coll):
     boolean(outer, box("rib", (-INNER_X / 2 - 0.1, INNER_X / 2 + 0.1), (rib_y0, RIB_Y1), (FLOOR_T - 0.1, BASE_H), coll=coll), "UNION")
     plate_low_z = HINGE_Z - PLATE_T / math.cos(THETA)  # plate underside at the hinge
     boolean(outer, box("rib_step", (-INNER_X / 2, INNER_X / 2), (HINGE_Y, RIB_Y1 + 1), (plate_low_z - 0.2, 60), coll=coll), "DIFFERENCE")
-    boolean(outer, box("rib_notch", (-RIB_NOTCH_W / 2, RIB_NOTCH_W / 2), (rib_y0 - 1, RIB_Y1 + 1), (-1, FLOOR_T + RIB_NOTCH_H), coll=coll), "DIFFERENCE")
+    boolean(outer, box("rib_opening", (-RIB_OPENING_W / 2, RIB_OPENING_W / 2), (rib_y0 - 1, RIB_Y1 + 1), (FLOOR_T, 60), coll=coll), "DIFFERENCE")
 
     # lid screw bosses, same positions as v1 (M3 self-tap)
     front_cy = WALL + FRONT_INNER_Y / 2
