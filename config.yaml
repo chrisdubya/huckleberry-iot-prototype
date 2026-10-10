@@ -33,7 +33,7 @@ display:
   brightness: 80         # 0-255, for dim_after_seconds after a button press
   dim_brightness: 20     # 0-255, the rest of the time
   dim_after_seconds: 60
-  ticker_speed: 24       # pixels per second
+  ticker_speed: 34       # pixels per second
   day_starts_at: 8       # today's totals count from 8am to 8am
 
 # Input key -> event. Events: pee, poo, both, bottle, sleep_toggle, nursing_toggle.
