@@ -1,9 +1,11 @@
 # Hardware
 
-## Parts (~$55)
+## Parts (~$55, plus ~$25 for the v2 display)
 
 | Item | Notes | ~Price |
 |------|-------|--------|
+| v2: 3.12" 256×64 SSD1322 OLED, yellow | Generic "Ver 2.1" blue module (ACEIRMC 2-pack). Needs its jumpers moved to 4-wire SPI; see [Display](#display-v2) | $25 |
+| v2: 8× M3×8 screws | 4 hold the display board to its plate, 4 hold the plate to the base | $2 |
 | Raspberry Pi Zero 2 **WH** | Pre-soldered header. Bare board ~$18 (PiShop.us, Adafruit) or an Amazon kit with genuine board + heatsink (~high $20s) | $18–30 |
 | microSD 32GB, A1-rated | SanDisk / Samsung | $8 |
 | 5V/2.5A PSU + micro-USB cable | Any solid 2.4A+ brick | $8 |
@@ -94,7 +96,7 @@ Pin choices are remappable in `config.yaml` under `gpio:` — none of the
 defaults conflict with boot straps, I2C, SPI, or UART, so those buses stay
 free for future add-ons (e.g. an OLED on I2C).
 
-## Display (v2, in progress)
+## Display (v2)
 
 3.12" 256x64 SSD1322 OLED module, yellow, "Ver 2.1" blue board (ACEIRMC
 2-pack on Amazon). Ships set to 8080 parallel; for 4-wire SPI the 0Ω jumpers
@@ -127,7 +129,31 @@ Measured for the case (calipers, as-built module):
 | Header | right edge, front-face solder joints 1 and 3.5 from the edge, spanning 5.9–26.2 from the bottom edge — nothing can bear on the front face there |
 | Thickness | 6.4 board + glass; header pins add ~8.5 behind |
 
-## Case (`case/huckdeck_case.scad`)
+## Case v2 (`case/huckdeck_case_v2.py`)
+
+Blender script (run it in Blender 4.2+/5.x, or open
+`case/huckdeck_case_v2.blend`); all dimensions are parameters at the top of
+the script. Three printed parts, two of them new:
+
+- **Base** (`case/base_v2.stl`): the v1 button section in front, unchanged,
+  so the **v1 top plate fits as-is**; behind it an open sloped section for
+  the display plate, with the Pi posts and the power slot in the rear wall.
+  The rib between the sections is open across the middle: wire everything
+  up outside, then lay the Pi and jumpers in.
+- **Display plate** (`case/display_plate_v2.stl`): the 30° face. The OLED
+  board sits glass-down on two rails along its short edges (the header
+  side's rail is split to clear the solder joints) and is held by four
+  M3×8 screws from behind, threaded into the plate. Assemble it on the
+  bench, drop it onto the base, four more M3×8 from the top into the
+  corner bosses.
+- **Top plate**: the v1 part below.
+
+Print both new parts at 0.2mm, open side / face up for the base, face
+down for the plate. The base wants a little tree support under the rear
+corner gussets and the power slot; the plate needs none. Overall
+109 × 121 mm, 45 mm tall at the front and 73 mm at the back.
+
+## Case v1 (`case/huckdeck_case.scad`)
 
 Parametric OpenSCAD, two printed parts:
 
