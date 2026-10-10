@@ -1,18 +1,23 @@
-"""Ribbon display feedback: a 256x64 "ticker" frame (SSD1322-class OLED).
+"""Ribbon display feedback: 256x64 frames for an SSD1322-class OLED.
 
-What it shows:
-  idle       — panes side by side: time since the last feed (and what it
-               was), time since the last diaper (and its type)
-  nursing    — the feed pane becomes a live timer for the running session
-  asleep     — an extra pane with a live sleep timer
-  on a press — the event's name straight away, a check mark and the time once
-               Huckleberry has it, then back to the panes
-  trouble    — "retrying" while a send is being retried, a cross if it's lost
+Two layouts, chosen by `display: mode:` in config.yaml:
+
+  ticker — one line of text scrolling continuously (nothing ever sits still,
+           so the OLED doesn't burn in): the latest diaper, the latest nursing
+           session (or the live timer if one is running), then today's diaper
+           count and today's nursing total. "Today" runs from DAY_START_HOUR.
+  panes  — static panes side by side: time since the last feed and diaper,
+           live nursing/sleep timers.
+
+In both: a button press shows the event's name straight away, a check mark
+and the time once Huckleberry has it, then back to the layout; "retrying"
+while a send is retried, a cross if it's lost. The panel runs at full
+brightness after a press and dims after `dim_after_seconds` without one.
 
 Everything here is device-independent: render() returns a grayscale Pillow
 image for whatever sink is attached (the browser simulator in display_sim.py
-now, a luma.oled device on the Pi later). Pillow is only imported here, so
-runs without a display never need it installed.
+or the luma.oled device on the Pi). Pillow is only imported here, so runs
+without a display never need it installed.
 """
 
 from __future__ import annotations
@@ -36,6 +41,10 @@ REMOTE_SECONDS = 3.0
 
 DIAPER_LABELS = {"pee": "PEE", "poo": "POOP", "both": "PEE+POOP", "dry": "DRY"}
 
+TICKER_FONT = 40  # one line, readable from across the room
+TICKER_GAP_PX = 44  # between items, with a dot in the middle (drawn: the font has no bullet)
+TICKER_DOT_R = 3
+
 
 @dataclass
 class DeckState:
@@ -51,6 +60,10 @@ class DeckState:
     last_feed_detail: str = ""  # e.g. "NURSED 12m L", "BOTTLE 120ml"
     last_diaper_start: float | None = None
     last_diaper_mode: str = ""  # DIAPER_LABELS key
+    # today's totals (since DAY_START_HOUR); None until fetched
+    diapers_today: int | None = None
+    nursing_count_today: int | None = None
+    nursing_seconds_today: float = 0.0
 
 
 @dataclass
@@ -84,6 +97,13 @@ def format_timer(seconds: float) -> str:
 
 def _duration(seconds: float) -> str:
     return f"{max(round(seconds / 60), 1)}m"
+
+
+def format_hours(seconds: float) -> str:
+    minutes = int(max(seconds, 0) // 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    return f"{minutes // 60}h {minutes % 60:02d}m"
 
 
 @lru_cache(maxsize=None)
@@ -178,8 +198,75 @@ def _draw_overlay(draw, overlay: Overlay) -> None:
         draw.text((WIDTH // 2, 52), overlay.sub, font=sub_font, fill=DIM, anchor="mm")
 
 
+def ticker_items(state: DeckState, now: float) -> list[list[tuple[str, int]]]:
+    """The ticker's items, each a list of (text, fill) runs: dim labels, bright values."""
+    items: list[list[tuple[str, int]]] = []
+    if state.last_diaper_start is not None:
+        label = DIAPER_LABELS.get(state.last_diaper_mode, "DIAPER")
+        ago = format_ago(now - state.last_diaper_start)
+        items.append([(f"DIAPER {label} ", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
+    else:
+        items.append([("DIAPER ", DIM), ("--", BRIGHT)])
+
+    if state.nursing_active:
+        elapsed = state.nursing_banked
+        if not state.nursing_paused and state.nursing_segment_start is not None:
+            elapsed += now - state.nursing_segment_start
+        label = "PAUSED" if state.nursing_paused else "NURSING"
+        if state.nursing_side:
+            label += f" {state.nursing_side.upper()}"
+        items.append([(f"{label} ", DIM), (format_timer(elapsed), BRIGHT)])
+    elif state.last_feed_start is not None:
+        ago = format_ago(now - state.last_feed_start)
+        items.append([(f"{state.last_feed_detail or 'FED'} ", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
+    else:
+        items.append([("NURSED ", DIM), ("--", BRIGHT)])
+
+    if state.diapers_today is not None:
+        n = state.diapers_today
+        items.append([("TODAY ", DIM), (str(n), BRIGHT), (" DIAPER" + ("" if n == 1 else "S"), DIM)])
+    if state.nursing_count_today is not None:
+        n = state.nursing_count_today
+        items.append([("TODAY ", DIM), (format_hours(state.nursing_seconds_today), BRIGHT), (" NURSING, ", DIM), (str(n), BRIGHT), (" FEED" + ("" if n == 1 else "S"), DIM)])
+    return items
+
+
+def render_strip(items: list[list[tuple[str, int]]]):
+    """The whole ticker as one long image; it scrolls through the frame."""
+    from PIL import Image, ImageDraw
+
+    font = _font(TICKER_FONT)
+    probe = ImageDraw.Draw(Image.new("L", (1, 1)))
+    item_widths = [sum(probe.textlength(text, font=font) for text, _ in item) for item in items]
+    width = max(1, int(sum(item_widths) + TICKER_GAP_PX * len(items)))  # a gap after every item, so the loop joins cleanly
+    strip = Image.new("L", (width, HEIGHT), 0)
+    draw = ImageDraw.Draw(strip)
+    x = 0.0
+    for item in items:
+        for text, fill in item:
+            draw.text((x, HEIGHT // 2), text, font=font, fill=fill, anchor="lm")
+            x += probe.textlength(text, font=font)
+        cx, cy = x + TICKER_GAP_PX / 2, HEIGHT / 2 + 2
+        draw.ellipse((cx - TICKER_DOT_R, cy - TICKER_DOT_R, cx + TICKER_DOT_R, cy + TICKER_DOT_R), fill=DIM)
+        x += TICKER_GAP_PX
+    return strip
+
+
+def crop_strip(strip, offset: int):
+    """A 256px window into the strip at `offset`, wrapping around."""
+    from PIL import Image
+
+    width = strip.width
+    offset %= width
+    frame = Image.new("L", (WIDTH, HEIGHT), 0)
+    frame.paste(strip.crop((offset, 0, min(offset + WIDTH, width), HEIGHT)), (0, 0))
+    if offset + WIDTH > width:
+        frame.paste(strip.crop((0, 0, offset + WIDTH - width, HEIGHT)), (width - offset, 0))
+    return frame
+
+
 def render(state: DeckState, now: float, overlay: Overlay | None = None):
-    """One 256x64 grayscale frame."""
+    """One 256x64 grayscale frame in the panes layout."""
     from PIL import Image, ImageDraw
 
     image = Image.new("L", (WIDTH, HEIGHT), 0)
@@ -198,15 +285,63 @@ def _clock(now: float) -> str:
 class Display:
     """Holds the deck state and the current overlay; renders frames on demand."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        mode: str = "ticker",
+        brightness: int = 80,
+        dim_brightness: int = 20,
+        dim_after_seconds: float = 60.0,
+        ticker_speed: float = 24.0,
+    ) -> None:
         self.state = DeckState()
+        self.mode = mode
+        self.brightness = brightness
+        self.dim_brightness = dim_brightness
+        self.dim_after = dim_after_seconds
+        self.ticker_speed = ticker_speed  # px/s
         self._overlay: Overlay | None = None
+        self._last_input = time.time()
+        self._strip = None
+        self._strip_key: tuple | None = None
+        self._strip_width = 1
+        self._scroll_start = time.time()
+        self._scroll_offset = 0.0  # px into the strip at _scroll_start
+
+    # -- brightness --------------------------------------------------------
+
+    def current_brightness(self, now: float | None = None) -> int:
+        now = time.time() if now is None else now
+        return self.brightness if now - self._last_input < self.dim_after else self.dim_brightness
+
+    def touch(self, now: float | None = None) -> None:
+        """A button was pressed: back to full brightness."""
+        self._last_input = time.time() if now is None else now
+
+    # -- frames ------------------------------------------------------------
 
     def frame(self, now: float | None = None):
         now = time.time() if now is None else now
         if self._overlay is not None and self._overlay.until is not None and now >= self._overlay.until:
             self._overlay = None
-        return render(self.state, now, self._overlay)
+        if self._overlay is not None or self.mode != "ticker":
+            return render(self.state, now, self._overlay)
+        return self._ticker_frame(now)
+
+    def _ticker_frame(self, now: float):
+        items = ticker_items(self.state, now)
+        key = tuple(tuple(item) for item in items)
+        if key != self._strip_key:
+            # text changed (a minute ticked over, a session started...): rebuild
+            # the strip but keep the scroll position so the motion stays smooth
+            self._scroll_offset = self.scroll_offset(now)
+            self._scroll_start = now
+            self._strip = render_strip(items)
+            self._strip_key = key
+            self._strip_width = self._strip.width
+        return crop_strip(self._strip, int(self.scroll_offset(now)))
+
+    def scroll_offset(self, now: float) -> float:
+        return (self._scroll_offset + (now - self._scroll_start) * self.ticker_speed) % self._strip_width
 
     def on_event(self, status: str, action: str, detail: str) -> None:
         """Same contract as StatusLed.on_event (see dispatcher.StatusCallback)."""
@@ -214,6 +349,7 @@ class Display:
         title = EVENT_LABELS.get(action, "").upper()
         match status:
             case "sending":
+                self.touch(now)
                 self._overlay = Overlay(title, "logging...")
             case "success":
                 self._overlay = Overlay(title, _clock(now), mark="check", until=now + SUCCESS_SECONDS)
@@ -271,6 +407,11 @@ class Display:
                 detail += f" {float(bottle.bottleAmount):g}{bottle.bottleUnits or ''}"
             self.state.last_feed_start, self.state.last_feed_detail = bottle_start, detail
 
+    def set_totals(self, diapers: int, nursing_count: int, nursing_seconds: float) -> None:
+        self.state.diapers_today = diapers
+        self.state.nursing_count_today = nursing_count
+        self.state.nursing_seconds_today = nursing_seconds
+
     def close(self) -> None:
         pass
 
@@ -282,6 +423,9 @@ class NullDisplay:
         pass
 
     def on_doc(self, collection: str, doc: Any) -> None:
+        pass
+
+    def set_totals(self, diapers: int, nursing_count: int, nursing_seconds: float) -> None:
         pass
 
     def close(self) -> None:

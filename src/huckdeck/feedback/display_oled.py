@@ -1,7 +1,7 @@
 """SSD1322 256x64 OLED output over SPI (luma.oled), for the Pi.
 
-Pushes Display.frame() to the panel once a second — only when it changed, so
-an idle deck sends nothing. DC/RST are driven through gpiozero like the
+Pushes Display.frame() to the panel — ~20 times a second while the ticker
+scrolls, once a second in panes mode, and only when the frame changed. DC/RST are driven through gpiozero like the
 buttons and LED, so the whole deck stays on one GPIO stack (no RPi.GPIO).
 
 luma/gpiozero/spidev are only imported here, so Mac runs never need them.
@@ -18,6 +18,7 @@ from .display import Display
 _LOGGER = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 1.0
+TICKER_REFRESH_SECONDS = 0.05
 
 
 class _GpiozeroPins:
@@ -75,9 +76,10 @@ def show(device, frame) -> None:
 class OledDisplay(Display):
     """Display whose frames go to the panel from a background refresh task."""
 
-    def __init__(self, dc_pin: int, rst_pin: int, brightness: int) -> None:
-        super().__init__()
-        self._device, self._pins = open_device(dc_pin, rst_pin, brightness)
+    def __init__(self, dc_pin: int, rst_pin: int, **display_options) -> None:
+        super().__init__(**display_options)
+        self._device, self._pins = open_device(dc_pin, rst_pin, self.brightness)
+        self._contrast = self.brightness
         self._last: bytes | None = None
         self._task: asyncio.Task | None = None
 
@@ -90,9 +92,13 @@ class OledDisplay(Display):
                 self.push()
             except Exception:  # noqa: BLE001 — a flaky SPI write shouldn't kill the deck
                 _LOGGER.warning("Display refresh failed", exc_info=True)
-            await asyncio.sleep(REFRESH_SECONDS)
+            await asyncio.sleep(TICKER_REFRESH_SECONDS if self.mode == "ticker" else REFRESH_SECONDS)
 
     def push(self) -> None:
+        wanted = self.current_brightness()
+        if wanted != self._contrast:
+            self._device.contrast(max(0, min(255, wanted)))
+            self._contrast = wanted
         frame = self.frame()
         raw = frame.tobytes()
         if raw != self._last:

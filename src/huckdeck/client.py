@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from huckleberry_api import HuckleberryAPI
@@ -28,6 +30,24 @@ SESSION_COLLECTIONS = {"sleep": "sleep", "nursing": "feed"}
 
 # on_change(kind, active), kind ∈ SESSION_COLLECTIONS; always called on the event loop.
 SessionCallback = Callable[[str, bool], None]
+
+
+@dataclass
+class DayTotals:
+    """Counts since the start of the current "day" (which starts at day_start_hour)."""
+
+    day_start: datetime
+    diapers: int
+    nursing_count: int
+    nursing_seconds: float
+
+
+def day_start(now: datetime, day_start_hour: int) -> datetime:
+    """The most recent day_start_hour o'clock at or before `now`."""
+    start = now.replace(hour=day_start_hour, minute=0, second=0, microsecond=0)
+    if start > now:
+        start -= timedelta(days=1)
+    return start
 
 # on_doc(collection, document) with the library's parsed root document for
 # "sleep", "feed" or "diaper"; always called on the event loop.
@@ -47,6 +67,7 @@ class HuckClient:
             email=email, password=password, timezone=timezone, websession=websession
         )
         self._config = config
+        self._tz = ZoneInfo(timezone)
         self.child_uid: str = ""
         self.child_name: str = ""
         self._fresh_lock = asyncio.Lock()
@@ -157,6 +178,17 @@ class HuckClient:
                     await self._start_listeners()
             except Exception:  # noqa: BLE001 — offline etc.; try again next tick
                 _LOGGER.warning("Keep-alive tick failed; will retry", exc_info=True)
+
+    async def day_totals(self, day_start_hour: int) -> DayTotals:
+        """Diapers and nursing logged since day_start_hour o'clock (local time)."""
+        now = datetime.now(self._tz)
+        start = day_start(now, day_start_hour)
+        await self._fresh()
+        diapers = await self._api.list_diaper_intervals(self.child_uid, start, now)
+        feeds = await self._api.list_feed_intervals(self.child_uid, start, now)
+        nursing = [f for f in feeds if getattr(f, "mode", None) == "breast"]
+        seconds = sum(float(getattr(f, "leftDuration", 0) or 0) + float(getattr(f, "rightDuration", 0) or 0) for f in nursing)
+        return DayTotals(start, len(diapers), len(nursing), seconds)
 
     async def close(self) -> None:
         await self._api.stop_all_listeners()

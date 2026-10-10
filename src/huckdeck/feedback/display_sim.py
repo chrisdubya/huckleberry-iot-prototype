@@ -22,15 +22,17 @@ PAGE = f"""<!doctype html>
 <img id="f" src="frame.png" width="{WIDTH * SCALE}" height="{HEIGHT * SCALE}"
      style="image-rendering:pixelated;border:10px solid #000;border-radius:6px">
 <script>
-setInterval(() => {{ document.getElementById("f").src = "frame.png?" + Date.now(); }}, 500);
+setInterval(() => {{ document.getElementById("f").src = "frame.png?" + Date.now(); }}, 100);
 </script>
 """
 
 
-def to_png(frame) -> bytes:
-    """Scale a display frame up and tint it like the panel."""
+def to_png(frame, brightness: int = 255) -> bytes:
+    """Scale a display frame up and tint it like the panel at `brightness` (0-255)."""
     from PIL import Image, ImageOps
 
+    if brightness < 255:
+        frame = frame.point(lambda v: v * (0.25 + 0.75 * brightness / 255))  # the panel never goes fully dark
     tinted = ImageOps.colorize(frame, black="#000000", white=OLED_COLOR)
     tinted = tinted.resize((WIDTH * SCALE, HEIGHT * SCALE), Image.Resampling.NEAREST)
     buffer = io.BytesIO()
@@ -45,7 +47,7 @@ async def start(display: Display, port: int) -> web.AppRunner:
         return web.Response(text=PAGE, content_type="text/html")
 
     async def frame(_request: web.Request) -> web.Response:
-        return web.Response(body=to_png(display.frame()), content_type="image/png")
+        return web.Response(body=to_png(display.frame(), display.current_brightness()), content_type="image/png")
 
     app = web.Application()
     app.add_routes([web.get("/", page), web.get("/frame.png", frame)])
