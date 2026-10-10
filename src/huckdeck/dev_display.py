@@ -11,14 +11,15 @@ from __future__ import annotations
 import io
 import sys
 
-from .feedback.display import DeckState, Overlay, crop_strip, render, render_strip, ticker_items
+from .feedback.display import DeckState, Overlay, crop_strip, render, render_session, render_strip, session_timers, ticker_items
 from .feedback.display_sim import to_png
 
 NOW = 1_800_000_000.0
 
 IDLE = DeckState(
     last_feed_start=NOW - 134 * 60,
-    last_feed_detail="NURSED 12m L",
+    last_feed_kind="nursing",
+    last_feed_detail="12m L",
     last_diaper_start=NOW - 48 * 60,
     last_diaper_mode="pee",
     diapers_today=6,
@@ -27,7 +28,8 @@ IDLE = DeckState(
 )
 BOTTLE = DeckState(
     last_feed_start=NOW - 25 * 60,
-    last_feed_detail="BOTTLE 120ml",
+    last_feed_kind="bottle",
+    last_feed_detail="120ml",
     last_diaper_start=NOW - 3 * 3600 - 5 * 60,
     last_diaper_mode="both",
 )
@@ -42,7 +44,8 @@ NURSING = DeckState(
 ASLEEP = DeckState(
     sleep_start=NOW - 62 * 60,
     last_feed_start=NOW - 75 * 60,
-    last_feed_detail="NURSED 18m R",
+    last_feed_kind="nursing",
+    last_feed_detail="18m R",
     last_diaper_start=NOW - 80 * 60,
     last_diaper_mode="pee",
 )
@@ -63,9 +66,12 @@ SCENES = [
 
 
 def ticker_scenes() -> list[tuple[str, object]]:
-    """Three windows into the scrolling ticker, 140px apart."""
+    """Windows into the scrolling ticker, plus the session timers that replace it."""
     strip = render_strip(ticker_items(IDLE, NOW))
-    return [(f"ticker, {offset}px in (strip is {strip.width}px)", crop_strip(strip, offset)) for offset in (0, 140, 280)]
+    scenes = [(f"ticker, {offset}px in (strip is {strip.width}px)", crop_strip(strip, offset)) for offset in range(0, strip.width, 230)]
+    scenes.append(("nursing in progress (replaces the ticker)", render_session(session_timers(NURSING, NOW), NOW)))
+    scenes.append(("asleep (replaces the ticker)", render_session(session_timers(ASLEEP, NOW), NOW)))
+    return scenes
 
 
 def main() -> None:

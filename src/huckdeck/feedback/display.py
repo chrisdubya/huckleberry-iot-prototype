@@ -2,14 +2,17 @@
 
 Two layouts, chosen by `display: mode:` in config.yaml:
 
-  ticker — one line of text scrolling continuously (nothing ever sits still,
-           so the OLED doesn't burn in): the latest diaper, the latest nursing
-           session (or the live timer if one is running), then today's diaper
-           count and today's nursing total. "Today" runs from DAY_START_HOUR.
-  panes  — static panes side by side: time since the last feed and diaper,
-           live nursing/sleep timers.
+  ticker — one line scrolling continuously (nothing ever sits still, so the
+           OLED doesn't burn in): the latest diaper, the latest nursing
+           session, then today's diaper count and today's nursing total.
+           "Today" runs from the configured day start (8am). Event types are
+           drawn as emoji (💧 pee, 💩 poop, 🤱 nursing, 😴 sleep, 🍼 bottle)
+           from the bundled monochrome Noto Emoji font.
+  panes  — static panes side by side: time since the last feed and diaper.
 
-In both: a button press shows the event's name straight away, a check mark
+While a nursing or sleep session is running, both layouts are replaced by
+one big live timer for it (drifting a few pixels now and then against
+burn-in). A button press shows the event's name straight away, a check mark
 and the time once Huckleberry has it, then back to the layout; "retrying"
 while a send is retried, a cross if it's lost. The panel runs at full
 brightness after a press and dims after `dim_after_seconds` without one.
@@ -25,6 +28,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from ..dispatcher import EVENT_LABELS
@@ -40,8 +44,14 @@ FAILED_SECONDS = 5.0
 REMOTE_SECONDS = 3.0
 
 DIAPER_LABELS = {"pee": "PEE", "poo": "POOP", "both": "PEE+POOP", "dry": "DRY"}
+DIAPER_EMOJI = {"pee": "💧", "poo": "💩", "both": "💧💩", "dry": "DRY"}
+NURSING_EMOJI, SLEEP_EMOJI, BOTTLE_EMOJI = "🤱", "😴", "🍼"
+EMOJI_FONT_PATH = Path(__file__).with_name("fonts") / "NotoEmoji.ttf"  # monochrome, OFL
 
 TICKER_FONT = 40  # one line, readable from across the room
+SESSION_FONT = 44  # the live timer while a session runs
+SESSION_DRIFT = (0, 1, 2, 1, 0, -1, -2, -1)  # px, one step every SESSION_DRIFT_SECONDS
+SESSION_DRIFT_SECONDS = 20
 TICKER_GAP_PX = 44  # between items, with a dot in the middle (drawn: the font has no bullet)
 TICKER_DOT_R = 3
 
@@ -57,7 +67,8 @@ class DeckState:
     nursing_segment_start: float | None = None
     sleep_start: float | None = None  # set while a sleep session is running
     last_feed_start: float | None = None
-    last_feed_detail: str = ""  # e.g. "NURSED 12m L", "BOTTLE 120ml"
+    last_feed_kind: str = ""  # "nursing" / "bottle"
+    last_feed_detail: str = ""  # e.g. "12m L", "120ml"
     last_diaper_start: float | None = None
     last_diaper_mode: str = ""  # DIAPER_LABELS key
     # today's totals (since DAY_START_HOUR); None until fetched
@@ -113,6 +124,46 @@ def _font(size: int):
     return ImageFont.load_default(size=size)
 
 
+@lru_cache(maxsize=None)
+def _emoji_font(size: int):
+    from PIL import ImageFont
+
+    font = ImageFont.truetype(str(EMOJI_FONT_PATH), size)
+    font.set_variation_by_axes([600])  # a bit heavier than Regular: reads better on the panel
+    return font
+
+
+def _is_emoji(ch: str) -> bool:
+    return ord(ch) >= 0x1F000 or ord(ch) == 0xFE0F
+
+
+def _segments(text: str) -> list[tuple[str, bool]]:
+    """Split text into (chunk, is_emoji) runs so each gets the right font."""
+    out: list[tuple[str, bool]] = []
+    for ch in text:
+        if ch == "\ufe0f":
+            continue
+        emoji = _is_emoji(ch)
+        if out and out[-1][1] == emoji:
+            out[-1] = (out[-1][0] + ch, emoji)
+        else:
+            out.append((ch, emoji))
+    return out
+
+
+def _text_width(draw, text: str, size: int) -> float:
+    return sum(draw.textlength(chunk, font=_emoji_font(size) if emoji else _font(size)) for chunk, emoji in _segments(text))
+
+
+def _draw_text(draw, x: float, cy: float, text: str, size: int, fill: int) -> float:
+    """Draw mixed text/emoji left-aligned at x, vertically centred on cy; return the new x."""
+    for chunk, emoji in _segments(text):
+        font = _emoji_font(size) if emoji else _font(size)
+        draw.text((x, cy), chunk, font=font, fill=fill, anchor="lm")
+        x += draw.textlength(chunk, font=font)
+    return x
+
+
 def _fit(draw, text: str, max_width: int, sizes: tuple[int, ...]):
     """Largest font from `sizes` (descending) that fits `text` in `max_width`."""
     for size in sizes:
@@ -135,7 +186,8 @@ def _panes(state: DeckState, now: float) -> list[tuple[str, str, str]]:
         panes.append((label, format_timer(elapsed), ""))
     elif state.last_feed_start is not None:
         ago = format_ago(now - state.last_feed_start)
-        panes.append((state.last_feed_detail or "FED", ago, "" if ago == "now" else "ago"))
+        label = ("BOTTLE" if state.last_feed_kind == "bottle" else "NURSED") + (f" {state.last_feed_detail}" if state.last_feed_detail else "")
+        panes.append((label, ago, "" if ago == "now" else "ago"))
     else:
         panes.append(("FED", "--", ""))
 
@@ -202,50 +254,78 @@ def ticker_items(state: DeckState, now: float) -> list[list[tuple[str, int]]]:
     """The ticker's items, each a list of (text, fill) runs: dim labels, bright values."""
     items: list[list[tuple[str, int]]] = []
     if state.last_diaper_start is not None:
-        label = DIAPER_LABELS.get(state.last_diaper_mode, "DIAPER")
         ago = format_ago(now - state.last_diaper_start)
-        items.append([(f"DIAPER {label} ", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
+        icon = DIAPER_EMOJI.get(state.last_diaper_mode, "DIAPER")
+        items.append([(f"{icon} ", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
     else:
-        items.append([("DIAPER ", DIM), ("--", BRIGHT)])
+        items.append([(f"{DIAPER_EMOJI['both']} ", DIM), ("--", BRIGHT)])
 
+    if state.last_feed_start is not None:
+        ago = format_ago(now - state.last_feed_start)
+        icon = BOTTLE_EMOJI if state.last_feed_kind == "bottle" else NURSING_EMOJI
+        detail = f"{state.last_feed_detail} " if state.last_feed_detail else ""
+        items.append([(f"{icon} {detail}", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
+    else:
+        items.append([(f"{NURSING_EMOJI} ", DIM), ("--", BRIGHT)])
+
+    if state.diapers_today is not None:
+        items.append([("TODAY ", DIM), (str(state.diapers_today), BRIGHT), (f" {DIAPER_EMOJI['both']}", DIM)])
+    if state.nursing_count_today is not None:
+        n = state.nursing_count_today
+        items.append([(f"TODAY {NURSING_EMOJI} ", DIM), (format_hours(state.nursing_seconds_today), BRIGHT), (", ", DIM), (str(n), BRIGHT), (" FEED" + ("" if n == 1 else "S"), DIM)])
+    return items
+
+
+def session_timers(state: DeckState, now: float) -> list[tuple[str, str]]:
+    """(icon+label, timer) for each running session; empty when none."""
+    timers = []
     if state.nursing_active:
         elapsed = state.nursing_banked
         if not state.nursing_paused and state.nursing_segment_start is not None:
             elapsed += now - state.nursing_segment_start
-        label = "PAUSED" if state.nursing_paused else "NURSING"
+        label = NURSING_EMOJI
         if state.nursing_side:
-            label += f" {state.nursing_side.upper()}"
-        items.append([(f"{label} ", DIM), (format_timer(elapsed), BRIGHT)])
-    elif state.last_feed_start is not None:
-        ago = format_ago(now - state.last_feed_start)
-        items.append([(f"{state.last_feed_detail or 'FED'} ", DIM), (ago, BRIGHT), ("" if ago == "now" else " ago", DIM)])
-    else:
-        items.append([("NURSED ", DIM), ("--", BRIGHT)])
+            label += f" {state.nursing_side[0].upper()}"
+        if state.nursing_paused:
+            label += " PAUSED"
+        timers.append((label, format_timer(elapsed)))
+    if state.sleep_start is not None:
+        timers.append((SLEEP_EMOJI, format_timer(now - state.sleep_start)))
+    return timers
 
-    if state.diapers_today is not None:
-        n = state.diapers_today
-        items.append([("TODAY ", DIM), (str(n), BRIGHT), (" DIAPER" + ("" if n == 1 else "S"), DIM)])
-    if state.nursing_count_today is not None:
-        n = state.nursing_count_today
-        items.append([("TODAY ", DIM), (format_hours(state.nursing_seconds_today), BRIGHT), (" NURSING, ", DIM), (str(n), BRIGHT), (" FEED" + ("" if n == 1 else "S"), DIM)])
-    return items
+
+def render_session(timers: list[tuple[str, str]], now: float):
+    """One big live timer (two side by side if both sessions somehow run)."""
+    from PIL import Image, ImageDraw
+
+    image = Image.new("L", (WIDTH, HEIGHT), 0)
+    draw = ImageDraw.Draw(image)
+    drift = SESSION_DRIFT[int(now // SESSION_DRIFT_SECONDS) % len(SESSION_DRIFT)]
+    slot_w = WIDTH // max(len(timers), 1)
+    for i, (label, value) in enumerate(timers):
+        size = SESSION_FONT
+        while size > 16 and _text_width(draw, f"{label} ", size) + _text_width(draw, value, size) > slot_w - 12:
+            size -= 2
+        total = _text_width(draw, f"{label} ", size) + _text_width(draw, value, size)
+        x = i * slot_w + (slot_w - total) / 2 + drift
+        x = _draw_text(draw, x, HEIGHT / 2 + drift / 2, f"{label} ", size, DIM)
+        _draw_text(draw, x, HEIGHT / 2 + drift / 2, value, size, BRIGHT)
+    return image
 
 
 def render_strip(items: list[list[tuple[str, int]]]):
     """The whole ticker as one long image; it scrolls through the frame."""
     from PIL import Image, ImageDraw
 
-    font = _font(TICKER_FONT)
     probe = ImageDraw.Draw(Image.new("L", (1, 1)))
-    item_widths = [sum(probe.textlength(text, font=font) for text, _ in item) for item in items]
+    item_widths = [sum(_text_width(probe, text, TICKER_FONT) for text, _ in item) for item in items]
     width = max(1, int(sum(item_widths) + TICKER_GAP_PX * len(items)))  # a gap after every item, so the loop joins cleanly
     strip = Image.new("L", (width, HEIGHT), 0)
     draw = ImageDraw.Draw(strip)
     x = 0.0
     for item in items:
         for text, fill in item:
-            draw.text((x, HEIGHT // 2), text, font=font, fill=fill, anchor="lm")
-            x += probe.textlength(text, font=font)
+            x = _draw_text(draw, x, HEIGHT / 2, text, TICKER_FONT, fill)
         cx, cy = x + TICKER_GAP_PX / 2, HEIGHT / 2 + 2
         draw.ellipse((cx - TICKER_DOT_R, cy - TICKER_DOT_R, cx + TICKER_DOT_R, cy + TICKER_DOT_R), fill=DIM)
         x += TICKER_GAP_PX
@@ -323,8 +403,13 @@ class Display:
         now = time.time() if now is None else now
         if self._overlay is not None and self._overlay.until is not None and now >= self._overlay.until:
             self._overlay = None
-        if self._overlay is not None or self.mode != "ticker":
+        if self._overlay is not None:
             return render(self.state, now, self._overlay)
+        timers = session_timers(self.state, now)
+        if timers:
+            return render_session(timers, now)  # a running session takes over the whole panel
+        if self.mode != "ticker":
+            return render(self.state, now)
         return self._ticker_frame(now)
 
     def _ticker_frame(self, now: float):
@@ -394,18 +479,16 @@ class Display:
         if nursing_start is None and bottle_start is None:
             return
         if bottle_start is None or (nursing_start is not None and nursing_start >= bottle_start):
-            detail = "NURSED"
+            parts = []
             if nursing.duration:
-                detail += f" {_duration(float(nursing.duration))}"
+                parts.append(_duration(float(nursing.duration)))
             side = prefs.lastSide.lastSide if prefs.lastSide else "none"
             if side != "none":
-                detail += f" {side[0].upper()}"
-            self.state.last_feed_start, self.state.last_feed_detail = nursing_start, detail
+                parts.append(side[0].upper())
+            self.state.last_feed_start, self.state.last_feed_kind, self.state.last_feed_detail = nursing_start, "nursing", " ".join(parts)
         else:
-            detail = "BOTTLE"
-            if bottle.bottleAmount:
-                detail += f" {float(bottle.bottleAmount):g}{bottle.bottleUnits or ''}"
-            self.state.last_feed_start, self.state.last_feed_detail = bottle_start, detail
+            detail = f"{float(bottle.bottleAmount):g}{bottle.bottleUnits or ''}" if bottle.bottleAmount else ""
+            self.state.last_feed_start, self.state.last_feed_kind, self.state.last_feed_detail = bottle_start, "bottle", detail
 
     def set_totals(self, diapers: int, nursing_count: int, nursing_seconds: float) -> None:
         self.state.diapers_today = diapers
