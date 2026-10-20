@@ -21,6 +21,8 @@ from zoneinfo import ZoneInfo
 import aiohttp
 from huckleberry_api import HuckleberryAPI
 
+from .epoch import epoch_seconds, is_millis
+
 _LOGGER = logging.getLogger(__name__)
 
 KEEPALIVE_SECONDS = 120  # well inside the library's 5-min-before-expiry refresh window
@@ -225,4 +227,27 @@ class HuckClient:
 
     async def complete_nursing(self) -> None:
         await self._fresh()
+        await self._fix_timer_units()
         await self._api.complete_nursing(self.child_uid)
+
+    async def _fix_timer_units(self) -> None:
+        """Rewrite millisecond nursing timer fields as seconds before completing.
+
+        A session started in the iOS app has feedStartTime in milliseconds; the
+        library copies it verbatim into the history row's `start`, which the
+        app then shows as thousands of years off (py-huckleberry-api #51).
+        """
+        firestore = await self._api._get_firestore_client()  # noqa: SLF001
+        feed_ref = firestore.collection("feed").document(self.child_uid)
+        doc = await feed_ref.get(timeout=10.0)
+        timer = (doc.to_dict() or {}).get("timer") if doc.exists else None
+        if not timer:
+            return
+        fixes = {
+            f"timer.{field}": epoch_seconds(timer[field])
+            for field in ("feedStartTime", "timerStartTime")
+            if timer.get(field) is not None and is_millis(timer[field])
+        }
+        if fixes:
+            _LOGGER.warning("Nursing timer has millisecond fields (started from the app?); rewriting as seconds: %s", fixes)
+            await feed_ref.update(fixes)
