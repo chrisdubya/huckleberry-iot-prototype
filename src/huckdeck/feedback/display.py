@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from ..dispatcher import EVENT_LABELS
+from ..epoch import epoch_seconds
 
 WIDTH, HEIGHT = 256, 64
 
@@ -479,8 +480,8 @@ class Display:
     def _set_last_feed(self, prefs: Any) -> None:
         nursing = prefs.lastNursing if prefs else None
         bottle = prefs.lastBottle if prefs else None
-        nursing_start = float(nursing.start) if nursing and nursing.start is not None else None
-        bottle_start = float(bottle.start) if bottle and bottle.start is not None else None
+        nursing_start = epoch_seconds(nursing.start) if nursing and nursing.start is not None else None
+        bottle_start = epoch_seconds(bottle.start) if bottle and bottle.start is not None else None
         if nursing_start is None and bottle_start is None:
             return
         if bottle_start is None or (nursing_start is not None and nursing_start >= bottle_start):
