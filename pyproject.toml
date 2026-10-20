@@ -19,6 +19,12 @@ dependencies = [
 pi = [
     "gpiozero>=2.0.1.post3",
     "lgpio>=0.2.2 ; sys_platform == 'linux'",
+    "luma.oled>=3.13.0 ; sys_platform == 'linux'",
+    "spidev>=3.6 ; sys_platform == 'linux'",  # luma.core no longer pulls it in itself
+]
+# Ribbon display rendering (browser simulator now, OLED on the Pi later).
+display = [
+    "pillow>=12.0.0",
 ]
 
 [project.scripts]
