@@ -100,3 +100,10 @@ freshly wired panel on the Pi without an account:
 ```sh
 uv run --extra pi python -m huckdeck.dev_oledtest
 ```
+
+## ESP32
+
+The same deck also builds as native firmware for an ESP32-S3 or ESP32:
+same buttons, LED, display and Huckleberry writes, with the phone-to-deck
+sync polled every few seconds instead of pushed. Source in
+[esp32/](esp32/), build and wiring in [docs/esp32.md](docs/esp32.md).

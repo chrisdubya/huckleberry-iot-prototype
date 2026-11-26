@@ -1,0 +1,156 @@
+menu "huckdeck"
+
+    menu "Network and account"
+        config HUCKDECK_WIFI_SSID
+            string "WiFi SSID"
+            default ""
+        config HUCKDECK_WIFI_PASSWORD
+            string "WiFi password"
+            default ""
+        config HUCKDECK_HUCKLEBERRY_EMAIL
+            string "Huckleberry account email"
+            default ""
+        config HUCKDECK_HUCKLEBERRY_PASSWORD
+            string "Huckleberry account password"
+            default ""
+        config HUCKDECK_TZ
+            string "Time zone (POSIX TZ string)"
+            default "EST5EDT,M3.2.0,M11.1.0"
+            help
+                America/New_York is EST5EDT,M3.2.0,M11.1.0; America/Chicago is
+                CST6CDT,M3.2.0,M11.1.0; America/Los_Angeles is PST8PDT,M3.2.0,M11.1.0;
+                Europe/London is GMT0BST,M3.5.0/1,M10.5.0. Sets the timestamps'
+                offset and when "today" starts.
+        config HUCKDECK_CHILD_UID
+            string "Child uid (blank = first child on the account)"
+            default ""
+        config HUCKDECK_POLL_SECONDS
+            int "Seconds between polls of the sleep/nursing timers"
+            default 5
+            range 2 120
+            help
+                The Pi gets live Firestore pushes; the ESP32 polls instead.
+                A session started on the phone shows up here within this long.
+    endmenu
+
+    menu "Events"
+        config HUCKDECK_BOTTLE_AMOUNT
+            int "Bottle button: amount"
+            default 120
+        config HUCKDECK_BOTTLE_UNITS
+            string "Bottle button: units (ml or oz)"
+            default "ml"
+        config HUCKDECK_BOTTLE_TYPE
+            string "Bottle button: type (Formula, Breast Milk, Cow Milk, ...)"
+            default "Formula"
+        config HUCKDECK_NURSING_START_SIDE
+            string "Nursing button: side a session starts on (left or right)"
+            default "left"
+        config HUCKDECK_DEBOUNCE_SECONDS
+            int "Ignore a repeat press of the same button within (seconds)"
+            default 2
+    endmenu
+
+    menu "Display"
+        config HUCKDECK_DISPLAY_ENABLE
+            bool "SSD1322 256x64 OLED attached"
+            default y
+        config HUCKDECK_DISPLAY_PANES
+            bool "Static panes layout instead of the scrolling ticker"
+            default n
+        config HUCKDECK_DISPLAY_BRIGHTNESS
+            int "Brightness after a button press (0-255)"
+            default 80
+        config HUCKDECK_DISPLAY_DIM_BRIGHTNESS
+            int "Brightness the rest of the time (0-255)"
+            default 20
+        config HUCKDECK_DISPLAY_DIM_AFTER_SECONDS
+            int "Seconds after a press before dimming"
+            default 60
+        config HUCKDECK_DISPLAY_TICKER_SPEED
+            int "Ticker speed (px/s)"
+            default 34
+        config HUCKDECK_DAY_STARTS_AT
+            int "Hour today's totals count from (0-23)"
+            default 8
+            range 0 23
+    endmenu
+
+    menu "Pins"
+        config HUCKDECK_BTN_PEE_GPIO
+            int "Pee button GPIO"
+            default 4 if IDF_TARGET_ESP32S3
+            default 32
+        config HUCKDECK_BTN_POO_GPIO
+            int "Poop button GPIO"
+            default 5 if IDF_TARGET_ESP32S3
+            default 33
+        config HUCKDECK_BTN_BOTH_GPIO
+            int "Both button GPIO"
+            default 6 if IDF_TARGET_ESP32S3
+            default 25
+        config HUCKDECK_BTN_BOTTLE_GPIO
+            int "Bottle button GPIO"
+            default 7 if IDF_TARGET_ESP32S3
+            default 26
+        config HUCKDECK_BTN_SLEEP_GPIO
+            int "Sleep toggle button GPIO"
+            default 15 if IDF_TARGET_ESP32S3
+            default 27
+        config HUCKDECK_BTN_NURSING_GPIO
+            int "Nursing toggle button GPIO"
+            default 16 if IDF_TARGET_ESP32S3
+            default 14
+        config HUCKDECK_BTN_GND_GPIOS
+            string "Spare GPIOs held low as extra button grounds"
+            default ""
+            help
+                Comma-separated GPIO numbers (for example "1,2,13") driven low
+                at boot so a button's ground lead can plug into them when the
+                board has run out of GND pins. Buttons only: a GPIO cannot
+                sink the current of the display or the LED.
+        config HUCKDECK_LED_RED_GPIO
+            int "RGB LED red GPIO (-1 = none)"
+            default 17 if IDF_TARGET_ESP32S3
+            default 16
+        config HUCKDECK_LED_GREEN_GPIO
+            int "RGB LED green GPIO (-1 = none)"
+            default 18 if IDF_TARGET_ESP32S3
+            default 17
+        config HUCKDECK_LED_BLUE_GPIO
+            int "RGB LED blue GPIO (-1 = none)"
+            default 8 if IDF_TARGET_ESP32S3
+            default 4
+        config HUCKDECK_LED_PIXEL_GPIO
+            int "Onboard addressable RGB LED (WS2812) GPIO (-1 = none)"
+            default -1
+            help
+                Most ESP32-S3 dev boards carry one addressable RGB LED, usually
+                on GPIO48 (GPIO38 on some revisions). Set its pin here to use it
+                as the status LED instead of, or as well as, a wired RGB LED.
+        config HUCKDECK_LED_PIXEL_BRIGHTNESS
+            int "Onboard RGB LED brightness (1-100 %)"
+            range 1 100
+            default 25
+        config HUCKDECK_OLED_MOSI_GPIO
+            int "OLED MOSI (D1) GPIO"
+            default 11 if IDF_TARGET_ESP32S3
+            default 23
+        config HUCKDECK_OLED_SCLK_GPIO
+            int "OLED SCLK (D0) GPIO"
+            default 12 if IDF_TARGET_ESP32S3
+            default 18
+        config HUCKDECK_OLED_CS_GPIO
+            int "OLED CS GPIO"
+            default 10 if IDF_TARGET_ESP32S3
+            default 5
+        config HUCKDECK_OLED_DC_GPIO
+            int "OLED DC GPIO"
+            default 9 if IDF_TARGET_ESP32S3
+            default 21
+        config HUCKDECK_OLED_RST_GPIO
+            int "OLED RST GPIO"
+            default 14 if IDF_TARGET_ESP32S3
+            default 22
+    endmenu
+endmenu
