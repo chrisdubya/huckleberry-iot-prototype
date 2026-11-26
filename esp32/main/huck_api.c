@@ -664,18 +664,9 @@ static void regular_doc(void *vctx, const cJSON *fields)
     count_entry(vctx, fields);
 }
 
-static void multi_doc(void *vctx, const cJSON *fields)
+static void multi_entry(void *vctx, const cJSON *entry_fields)
 {
-    const cJSON *data = fs_get(fields, "data");
-    const cJSON *mv = data ? cJSON_GetObjectItemCaseSensitive(data, "mapValue") : NULL;
-    const cJSON *entries = mv ? cJSON_GetObjectItemCaseSensitive(mv, "fields") : NULL;
-    const cJSON *entry;
-    cJSON_ArrayForEach(entry, entries) {
-        const cJSON *emv = cJSON_GetObjectItemCaseSensitive(entry, "mapValue");
-        const cJSON *efields = emv ? cJSON_GetObjectItemCaseSensitive(emv, "fields") : NULL;
-        if (efields)
-            count_entry(vctx, efields);
-    }
+    count_entry(vctx, entry_fields);
 }
 
 static cJSON *field_ref(const char *name)
@@ -732,11 +723,12 @@ static int count_collection(const char *collection, totals_ctx_t *ctx)
     if (fs_run_query(parent, q, regular_doc, ctx))
         return -1;
 
-    /* Query 2: multi-entry documents (can't filter by nested start field) */
+    /* Query 2: multi-entry documents (can't filter by nested start field). These hold up to
+     * 256 entries and run to a few hundred KB, so their `data` map is read an entry at a time. */
     cJSON *q2 = cJSON_CreateObject();
     cJSON_AddItemToObject(q2, "from", from_intervals());
     cJSON_AddItemToObject(q2, "where", field_filter("multi", "EQUAL", fs_bool(true)));
-    return fs_run_query(parent, q2, multi_doc, ctx);
+    return fs_run_query_map_entries(parent, q2, "data", multi_entry, ctx);
 }
 
 int huck_day_totals(int day_start_hour, day_totals_t *out)

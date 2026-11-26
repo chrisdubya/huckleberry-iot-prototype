@@ -457,7 +457,7 @@ static void render_session(gfx_t *g, const timer_t_ *timers, int n, double now)
     int slot_w = DISPLAY_WIDTH / (n > 1 ? n : 1);
     for (int i = 0; i < n; i++) {
         char label[32];
-        snprintf(label, sizeof(label), "%s ", timers[i].label);
+        snprintf(label, sizeof(label), "%.*s ", (int)sizeof(timers[i].label) - 1, timers[i].label);
         int size = SESSION_FONT;
         while (size > 16 && gfx_text_width(label, size) + gfx_text_width(timers[i].value, size) > slot_w - 12)
             size -= 2;

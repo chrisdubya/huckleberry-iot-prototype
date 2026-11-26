@@ -36,9 +36,11 @@ Two smaller things worth knowing:
 - The Python deck uses raw millisecond values from an iOS-started nursing
   timer for the live display; the firmware normalises them, so the big timer
   is right either way.
-- The daily totals query selects only the fields it counts, and any single
-  response element over 96 KB is skipped rather than parsed (a safety valve
-  for the "multi" history containers on a long-used account).
+- The daily totals query selects only the fields it counts. The "multi"
+  history containers (up to 256 entries, a few hundred KB each on a
+  long-used account) are read one entry at a time as the response streams
+  in, so their size does not matter. Any other single response element over
+  96 KB is skipped rather than parsed.
 
 ## Hardware
 

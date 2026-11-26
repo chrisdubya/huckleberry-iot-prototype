@@ -447,6 +447,44 @@ static void test_day_totals(void)
     CHECK(strstr(req(1)->body, "\"fieldPath\":\"multi\"},\"op\":\"EQUAL\",\"value\":{\"booleanValue\":true}") != NULL);
 }
 
+/* A full history container: 256 entries, pretty-printed like the real API, well over the element cap. */
+static void test_day_totals_big_multi(void)
+{
+    setup_deck();
+    size_t cap = 400 * 1024, n = 0;
+    char *json = malloc(cap);
+    n += snprintf(json + n, cap - n,
+                  "[{\n  \"document\": {\n    \"name\": \"projects/p/databases/(default)/documents/feed/kid1/intervals/big\",\n"
+                  "    \"fields\": {\n      \"multi\": {\n        \"booleanValue\": true\n      },\n"
+                  /* a decoy map field with an in-range start: only `data` entries may count */
+                  "      \"other\": {\n        \"mapValue\": {\n          \"fields\": {\n            \"x\": {\n              \"mapValue\": {\n"
+                  "                \"fields\": {\"start\": {\"doubleValue\": 1799992000}, \"mode\": {\"stringValue\": \"breast\"}}}}}}},\n"
+                  "      \"data\": {\n        \"mapValue\": {\n          \"fields\": {\n");
+    for (int i = 0; i < 256; i++) {
+        /* three entries fall inside the day (two breast, one bottle); the rest are a year old */
+        double start = i == 10 || i == 200 || i == 255 ? 1799990000 + i : 1760000000 + i;
+        const char *mode = i == 200 ? "bottle" : "breast";
+        n += snprintf(json + n, cap - n,
+                      "%s            \"entry \\\"%d\\\" }\": {\n              \"mapValue\": {\n                \"fields\": {\n"
+                      "                  \"start\": {\n                    \"doubleValue\": %.0f\n                  },\n"
+                      "                  \"mode\": {\n                    \"stringValue\": \"%s\"\n                  },\n"
+                      "                  \"leftDuration\": {\n                    \"doubleValue\": 100\n                  },\n"
+                      "                  \"notes\": {\n                    \"stringValue\": \"%0400d\"\n                  }\n"
+                      "                }\n              }\n            }",
+                      i ? ",\n" : "", i, start, mode, 0);
+    }
+    n += snprintf(json + n, cap - n, "\n          }\n        }\n      }\n    }\n  },\n  \"readTime\": \"r\"\n}\n]");
+    CHECK(n > 96 * 1024 && n < cap);
+    query_json = json;
+    day_totals_t totals;
+    CHECK(huck_day_totals(8, &totals) == 0);
+    CHECK(totals.diapers == 3);
+    CHECK(totals.nursing_count == 2);
+    CHECK(totals.nursing_seconds == 200);
+    query_json = "[]";
+    free(json);
+}
+
 static void test_display_docs(void)
 {
     display_config_t cfg = {DISPLAY_MODE_TICKER, 80, 20, 60, 34};
@@ -480,6 +518,7 @@ int main(void)
     test_sync_remote();
     test_poll_change_detection();
     test_day_totals();
+    test_day_totals_big_multi();
     test_display_docs();
     if (failures) {
         printf("%d failure(s)\n", failures);

@@ -258,6 +258,21 @@ void fs_splitter_init(fs_array_splitter_t *s, void (*on_element)(void *, cJSON *
     memset(s, 0, sizeof(*s));
     s->on_element = on_element;
     s->ctx = ctx;
+    s->capture_depth = 2; /* [ element */
+}
+
+/* In a runQuery response an entry of a top-level map field sits at
+ * [ element { document { fields { <field> { mapValue { fields { <key>: { ... */
+#define FIELDS_DEPTH 4
+#define MAP_ENTRY_DEPTH 8
+
+void fs_splitter_init_map_entries(fs_array_splitter_t *s, const char *map_field, void (*on_entry)(void *, cJSON *), void *ctx)
+{
+    fs_splitter_init(s, on_entry, ctx);
+    if (map_field) {
+        s->capture_depth = MAP_ENTRY_DEPTH;
+        s->map_field = map_field;
+    }
 }
 
 static void splitter_push(fs_array_splitter_t *s, char c)
@@ -294,14 +309,27 @@ void fs_splitter_feed(fs_array_splitter_t *s, const char *data, size_t len)
                 s->escape = true;
             else if (c == '"')
                 s->in_string = false;
+            if (s->map_field && s->depth == FIELDS_DEPTH) {
+                /* strings directly inside a document's "fields" are its field names */
+                if (!s->in_string)
+                    s->key_match = s->key_len >= 0 && !strncmp(s->key, s->map_field, s->key_len) && !s->map_field[s->key_len];
+                else if (s->key_len >= 0 && s->key_len < (int)sizeof(s->key))
+                    s->key[s->key_len++] = c;
+                else
+                    s->key_len = -1; /* longer than any name we look for */
+            }
             continue;
         }
         if (c == '"') {
             s->in_string = true;
+            if (s->map_field && s->depth == FIELDS_DEPTH) {
+                s->key_len = 0;
+                s->key_match = false;
+            }
         } else if (c == '{' || c == '[') {
             s->depth++;
-            if (s->depth == 2 && c == '{' && !s->capturing) {
-                /* an element of the top-level array starts */
+            if (s->depth == s->capture_depth && c == '{' && !s->capturing && (!s->map_field || s->key_match)) {
+                /* an element of the top-level array (or an entry of the map field) starts */
                 s->capturing = true;
                 s->len = 0;
                 s->overflow = false;
@@ -309,7 +337,7 @@ void fs_splitter_feed(fs_array_splitter_t *s, const char *data, size_t len)
             }
         } else if (c == '}' || c == ']') {
             s->depth--;
-            if (s->depth == 1 && s->capturing) {
+            if (s->depth == s->capture_depth - 1 && s->capturing) {
                 s->capturing = false;
                 if (s->overflow) {
                     hd_log(TAG, "Skipping a response element over %d bytes", MAX_ELEMENT_BYTES);
@@ -534,10 +562,11 @@ static void splitter_data(void *ctx, const char *data, size_t len)
     fs_splitter_feed(ctx, data, len);
 }
 
-static int streamed_post(const char *url, const char *body, void (*on_element)(void *, cJSON *), void *ctx)
+/* map_field NULL: on_element gets each top-level array element; otherwise each entry of that map field. */
+static int streamed_post(const char *url, const char *body, const char *map_field, void (*on_element)(void *, cJSON *), void *ctx)
 {
     fs_array_splitter_t splitter;
-    fs_splitter_init(&splitter, on_element, ctx);
+    fs_splitter_init_map_entries(&splitter, map_field, on_element, ctx);
     int status = -1;
     hd_net_lock();
     for (int attempt = 0; attempt < 2; attempt++) {
@@ -548,7 +577,8 @@ static int streamed_post(const char *url, const char *body, void (*on_element)(v
             hd_log(TAG, "401 from Firestore; signing in again");
             if (firebase_auth_signin())
                 break;
-            fs_splitter_init(&splitter, on_element, ctx);
+            fs_splitter_free(&splitter);
+            fs_splitter_init_map_entries(&splitter, map_field, on_element, ctx);
             continue;
         }
         break;
@@ -574,7 +604,7 @@ int fs_batch_get(const char *const *doc_paths, int n, fs_doc_cb_t cb, void *ctx)
     char *body = cJSON_PrintUnformatted(req);
     cJSON_Delete(req);
     batch_ctx_t bctx = {cb, ctx};
-    int rc = streamed_post(FIRESTORE_BASE_URL ":batchGet", body, batch_element, &bctx);
+    int rc = streamed_post(FIRESTORE_BASE_URL ":batchGet", body, NULL, batch_element, &bctx);
     free(body);
     return rc;
 }
@@ -593,7 +623,16 @@ static void query_element(void *vctx, cJSON *el)
         ctx->cb(ctx->ctx, fields);
 }
 
-int fs_run_query(const char *parent_path, cJSON *structured_query, fs_query_cb_t cb, void *ctx)
+static void query_map_entry(void *vctx, cJSON *entry)
+{
+    query_ctx_t *ctx = vctx;
+    const cJSON *mv = cJSON_GetObjectItemCaseSensitive(entry, "mapValue");
+    const cJSON *fields = mv ? cJSON_GetObjectItemCaseSensitive(mv, "fields") : NULL;
+    if (fields)
+        ctx->cb(ctx->ctx, fields);
+}
+
+static int run_query(const char *parent_path, cJSON *structured_query, const char *map_field, fs_query_cb_t cb, void *ctx)
 {
     char url[256];
     build_url(url, sizeof(url), parent_path, ":runQuery");
@@ -602,7 +641,17 @@ int fs_run_query(const char *parent_path, cJSON *structured_query, fs_query_cb_t
     char *body = cJSON_PrintUnformatted(req);
     cJSON_Delete(req);
     query_ctx_t qctx = {cb, ctx};
-    int rc = streamed_post(url, body, query_element, &qctx);
+    int rc = streamed_post(url, body, map_field, map_field ? query_map_entry : query_element, &qctx);
     free(body);
     return rc;
+}
+
+int fs_run_query(const char *parent_path, cJSON *structured_query, fs_query_cb_t cb, void *ctx)
+{
+    return run_query(parent_path, structured_query, NULL, cb, ctx);
+}
+
+int fs_run_query_map_entries(const char *parent_path, cJSON *structured_query, const char *map_field, fs_query_cb_t cb, void *ctx)
+{
+    return run_query(parent_path, structured_query, map_field, cb, ctx);
 }

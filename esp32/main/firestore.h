@@ -69,6 +69,9 @@ int fs_batch_get(const char *const *doc_paths, int n, fs_doc_cb_t cb, void *ctx)
 /* Run a structured query under parent_path (e.g. "feed/abc123"); cb gets each document's fields. */
 typedef void (*fs_query_cb_t)(void *ctx, const cJSON *fields);
 int fs_run_query(const char *parent_path, cJSON *structured_query, fs_query_cb_t cb, void *ctx);
+/* Same query, but cb gets the fields of each entry of the top-level map field `map_field` of every
+ * matching document, one entry at a time, so a document of any size can be read. */
+int fs_run_query_map_entries(const char *parent_path, cJSON *structured_query, const char *map_field, fs_query_cb_t cb, void *ctx);
 
 /* Streaming JSON array splitter used by batchGet/runQuery (exposed for tests):
  * feed bytes, get a callback per top-level array element. */
@@ -77,9 +80,17 @@ typedef struct {
     size_t len, cap;
     int depth;
     bool in_string, escape, capturing, overflow;
+    int capture_depth;     /* nesting depth of the objects handed to on_element */
+    const char *map_field; /* set: only objects directly inside this top-level map field */
+    char key[32];          /* the field name of the document being read, while map_field is set */
+    int key_len;
+    bool key_match;
     void (*on_element)(void *ctx, cJSON *element);
     void *ctx;
 } fs_array_splitter_t;
 void fs_splitter_init(fs_array_splitter_t *s, void (*on_element)(void *, cJSON *), void *ctx);
+/* Callback per entry ({"mapValue": ...}) of a top-level map field of each runQuery document instead
+ * (a NULL map_field is plain fs_splitter_init). */
+void fs_splitter_init_map_entries(fs_array_splitter_t *s, const char *map_field, void (*on_entry)(void *, cJSON *), void *ctx);
 void fs_splitter_feed(fs_array_splitter_t *s, const char *data, size_t len);
 void fs_splitter_free(fs_array_splitter_t *s);
