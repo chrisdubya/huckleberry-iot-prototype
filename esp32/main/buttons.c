@@ -3,6 +3,8 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "sdkconfig.h"
+#include <stdlib.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -40,9 +42,33 @@ static void task(void *arg)
     }
 }
 
+/* Spare pins held low so button ground leads have somewhere to land. */
+static void soft_grounds_start(void)
+{
+    const char *p = CONFIG_HUCKDECK_BTN_GND_GPIOS;
+    while (*p) {
+        char *end;
+        long pin = strtol(p, &end, 10);
+        if (end == p) {
+            p++;
+            continue;
+        }
+        p = end;
+        if (!GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+            ESP_LOGW(TAG, "GPIO %ld cannot be a button ground", pin);
+            continue;
+        }
+        gpio_reset_pin((gpio_num_t)pin);
+        gpio_set_level((gpio_num_t)pin, 0);
+        gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
+        ESP_LOGI(TAG, "GPIO %ld -> ground for buttons", pin);
+    }
+}
+
 void buttons_start(const int *pins, button_cb_t on_press)
 {
     on_press_ = on_press;
+    soft_grounds_start();
     uint64_t mask = 0;
     for (int i = 0; i < BTN_COUNT; i++) {
         pins_[i] = pins[i];

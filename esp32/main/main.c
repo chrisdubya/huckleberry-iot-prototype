@@ -211,7 +211,8 @@ void app_main(void)
     if (dispatcher_nursing_active())
         ESP_LOGI(TAG, "Resumed with a nursing session in progress (press its button to complete it)");
 
-    xTaskCreate(dispatcher_task, "dispatcher", 12288, NULL, 6, NULL);
+    /* Writes go main -> huck_api -> firestore -> http -> TLS and use ~12.6 KB of stack. */
+    xTaskCreate(dispatcher_task, "dispatcher", 24576, NULL, 6, NULL);
     xTaskCreate(poll_task, "poll", 12288, NULL, 5, NULL);
     if (display_enabled)
         xTaskCreate(totals_task, "totals", 12288, NULL, 3, NULL);

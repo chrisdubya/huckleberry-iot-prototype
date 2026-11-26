@@ -75,6 +75,16 @@ Default pins (change any of them in `menuconfig → huckdeck → Pins`):
 Buttons use the internal pull-ups; all grounds are common. The OLED's VCC
 goes to 3V3.
 
+Two optional settings in the same menu save wiring:
+
+- **Onboard addressable RGB LED**: most ESP32-S3 dev boards carry a WS2812,
+  usually on GPIO48 (GPIO38 on some revisions). Set its pin and it becomes
+  the status LED, so no external LED or resistors are needed. Brightness is
+  a separate setting (default 25 %).
+- **Spare GPIOs held low as extra button grounds**: a comma-separated list
+  (for example `1,2,13,21`) for boards with too few GND pins. Buttons only;
+  the display and a wired LED need a real GND.
+
 ## Build and flash
 
 Install [ESP-IDF 5.3 or newer](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/)

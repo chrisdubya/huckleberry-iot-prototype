@@ -101,6 +101,14 @@ menu "huckdeck"
             int "Nursing toggle button GPIO"
             default 16 if IDF_TARGET_ESP32S3
             default 14
+        config HUCKDECK_BTN_GND_GPIOS
+            string "Spare GPIOs held low as extra button grounds"
+            default ""
+            help
+                Comma-separated GPIO numbers (for example "1,2,13") driven low
+                at boot so a button's ground lead can plug into them when the
+                board has run out of GND pins. Buttons only: a GPIO cannot
+                sink the current of the display or the LED.
         config HUCKDECK_LED_RED_GPIO
             int "RGB LED red GPIO (-1 = none)"
             default 17 if IDF_TARGET_ESP32S3
@@ -113,6 +121,17 @@ menu "huckdeck"
             int "RGB LED blue GPIO (-1 = none)"
             default 8 if IDF_TARGET_ESP32S3
             default 4
+        config HUCKDECK_LED_PIXEL_GPIO
+            int "Onboard addressable RGB LED (WS2812) GPIO (-1 = none)"
+            default -1
+            help
+                Most ESP32-S3 dev boards carry one addressable RGB LED, usually
+                on GPIO48 (GPIO38 on some revisions). Set its pin here to use it
+                as the status LED instead of, or as well as, a wired RGB LED.
+        config HUCKDECK_LED_PIXEL_BRIGHTNESS
+            int "Onboard RGB LED brightness (1-100 %)"
+            range 1 100
+            default 25
         config HUCKDECK_OLED_MOSI_GPIO
             int "OLED MOSI (D1) GPIO"
             default 11 if IDF_TARGET_ESP32S3

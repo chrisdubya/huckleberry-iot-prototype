@@ -4,6 +4,9 @@
 #include <string.h>
 
 #include "driver/ledc.h"
+#include "driver/rmt_tx.h"
+#include "esp_log.h"
+#include "sdkconfig.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -47,8 +50,58 @@ static struct {
 
 static const ledc_channel_t CHANNELS[3] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2};
 
+/* -- onboard addressable LED (WS2812), optional ------------------------ */
+
+static rmt_channel_handle_t px_chan;
+static rmt_encoder_handle_t px_enc;
+static uint8_t px_last[3] = {1, 1, 1}; /* anything but "off", so the first write goes out */
+
+static void pixel_init(int pin)
+{
+    if (pin < 0)
+        return;
+    rmt_tx_channel_config_t chan = {
+        .gpio_num = pin,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = 10 * 1000 * 1000, /* 0.1 us ticks */
+        .mem_block_symbols = 64,
+        .trans_queue_depth = 1,
+    };
+    rmt_bytes_encoder_config_t enc = {
+        .bit0 = {.level0 = 1, .duration0 = 3, .level1 = 0, .duration1 = 9},
+        .bit1 = {.level0 = 1, .duration0 = 9, .level1 = 0, .duration1 = 3},
+        .flags.msb_first = 1,
+    };
+    if (rmt_new_tx_channel(&chan, &px_chan) != ESP_OK || rmt_new_bytes_encoder(&enc, &px_enc) != ESP_OK ||
+        rmt_enable(px_chan) != ESP_OK) {
+        ESP_LOGW("led", "Onboard LED on GPIO %d could not be set up", pin);
+        px_chan = NULL;
+        return;
+    }
+    ESP_LOGI("led", "Onboard RGB LED on GPIO %d", pin);
+}
+
+static void pixel_write(color_t c)
+{
+    if (!px_chan)
+        return;
+    float k = CONFIG_HUCKDECK_LED_PIXEL_BRIGHTNESS / 100.0f * 255;
+    uint8_t grb[3] = {
+        (uint8_t)(fminf(fmaxf(c.g, 0), 1) * k),
+        (uint8_t)(fminf(fmaxf(c.r, 0), 1) * k),
+        (uint8_t)(fminf(fmaxf(c.b, 0), 1) * k),
+    };
+    if (memcmp(grb, px_last, 3) == 0)
+        return;
+    memcpy(px_last, grb, 3);
+    rmt_transmit_config_t tx = {.loop_count = 0};
+    if (rmt_transmit(px_chan, px_enc, grb, sizeof(grb), &tx) == ESP_OK)
+        rmt_tx_wait_all_done(px_chan, 10);
+}
+
 static void write_color(color_t c)
 {
+    pixel_write(c);
     float v[3] = {c.r, c.g, c.b};
     for (int i = 0; i < 3; i++) {
         if (L.pins[i] < 0)
@@ -175,6 +228,7 @@ void led_init(int red_pin, int green_pin, int blue_pin)
         };
         ledc_channel_config(&ch);
     }
+    pixel_init(CONFIG_HUCKDECK_LED_PIXEL_GPIO);
     solid(DIM_GREEN); /* "I'm running" — reverts to idle shortly */
     revert_after(STARTUP_GREEN_S);
     xTaskCreate(task, "led", 2048, NULL, 5, NULL);
