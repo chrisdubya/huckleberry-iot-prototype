@@ -62,9 +62,9 @@ Default pins (change any of them in `menuconfig → huckdeck → Pins`):
 | Button 1 pee | GPIO4 | GPIO32 |
 | Button 2 poop | GPIO5 | GPIO33 |
 | Button 3 both | GPIO6 | GPIO25 |
-| Button 4 bottle | GPIO7 | GPIO26 |
-| Button 5 sleep | GPIO15 | GPIO27 |
-| Button 6 nursing | GPIO16 | GPIO14 |
+| Button 4 bottle | GPIO40 | GPIO26 |
+| Button 5 sleep | GPIO41 | GPIO27 |
+| Button 6 nursing | GPIO42 | GPIO14 |
 | LED red / green / blue | GPIO17 / 18 / 8 | GPIO16 / 17 / 4 |
 | OLED MOSI (D1) | GPIO11 | GPIO23 |
 | OLED SCLK (D0) | GPIO12 | GPIO18 |
@@ -73,7 +73,9 @@ Default pins (change any of them in `menuconfig → huckdeck → Pins`):
 | OLED RST | GPIO14 | GPIO22 |
 
 Buttons use the internal pull-ups; all grounds are common. The OLED's VCC
-goes to 3V3.
+goes to 3V3. On the S3 dev board, buttons 1–3 and the OLED sit on one
+header row and buttons 4–6 on the other, so each row of the deck wires to
+its own side of the board.
 
 Two optional settings in the same menu save wiring:
 
@@ -82,7 +84,9 @@ Two optional settings in the same menu save wiring:
   the status LED, so no external LED or resistors are needed. Brightness is
   a separate setting (default 25 %).
 - **Spare GPIOs held low as extra button grounds**: a comma-separated list
-  (for example `1,2,13,21`) for boards with too few GND pins. Buttons only;
+  (for example `39`) for boards with too few GND pins. The reference S3
+  build has five buttons on real GND pins and the bottle button's ground
+  on GPIO39, next to its signal on GPIO40. Buttons only;
   the display and a wired LED need a real GND.
 
 ## Build and flash

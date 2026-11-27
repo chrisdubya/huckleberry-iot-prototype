@@ -129,6 +129,43 @@ Measured for the case (calipers, as-built module):
 | Header | right edge, front-face solder joints 1 and 3.5 from the edge, spanning 5.9–26.2 from the bottom edge — nothing can bear on the front face there |
 | Thickness | 6.4 board + glass; header pins add ~8.5 behind |
 
+## Case v3 (`case/huckdeck_case_v3.py`), ESP32 build
+
+Blender script like v2 (or open `case/huckdeck_case_v3.blend`). One wedge,
+109 × 124 mm, 35 mm tall at the front and 57 mm at the back, two printed
+parts and no screws on the outside:
+
+- **Shell** (`case/shell_v3.stl`): walls and the 10° face in one piece. Six
+  button holes (36 mm pitch across, 32 mm front to back), the OLED window
+  with v2's rail mount behind it, a light duct from a 4 mm hole in the face
+  straight down to the board's RGB LED, the USB-C slot in the left wall.
+  The STL is already face down; no supports.
+- **Bottom** (`case/bottom_v3.stl`): plate recessed into the shell with four
+  posts for the ESP32 expansion base. Four M3×8 button-head screws from
+  underneath into the shell's corner bosses, four into the posts, four for
+  the display as before.
+
+The dev board stays on its expansion base, flat under the display, USB-C
+ports at the left wall. Assemble: display onto the shell, snap the buttons
+in, screw the base to the bottom plate, plug the jumpers, close.
+
+The board dimensions in the script were **scaled from product photos, not
+measured**. Check these with calipers and correct the parameters before
+printing (the bottom plate alone is a quick test print):
+
+| Parameter | Value used | What to measure |
+|-----------|-----------|-----------------|
+| `BASE_L`, `BASE_W` | 71.2 × 47.1 | expansion base PCB |
+| `BASE_HOLE_DL`, `BASE_HOLE_DW` | 63.6 × 40.1 | mounting holes, centre to centre (and their diameter: posts assume M3) |
+| `STACK_H` | 11.0 | top of the base PCB to the underside of the dev PCB |
+| `DEV_USB_INSET` | 3.3 | dev PCB's USB edge, in from the base's USB edge |
+| `USB_PITCH` | 11.3 | between the two USB-C ports |
+| `LED_FROM_USB_EDGE`, `LED_OFF_CENTRE` | 26.9, 2.3 | RGB LED centre from the dev PCB's USB edge, and off the board's centreline (towards the "USB" port side) |
+| `BUTTON_DEPTH` | 32 | button below the face, including lugs and solder |
+
+`LED_SKIN = 0.4` closes the LED hole with two layers of the face, for a
+hidden glow-through light in white or light filament.
+
 ## Case v2 (`case/huckdeck_case_v2.py`)
 
 Blender script (run it in Blender 4.2+/5.x, or open
