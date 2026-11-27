@@ -91,21 +91,21 @@ menu "huckdeck"
             default 25
         config HUCKDECK_BTN_BOTTLE_GPIO
             int "Bottle button GPIO"
-            default 7 if IDF_TARGET_ESP32S3
+            default 40 if IDF_TARGET_ESP32S3
             default 26
         config HUCKDECK_BTN_SLEEP_GPIO
             int "Sleep toggle button GPIO"
-            default 15 if IDF_TARGET_ESP32S3
+            default 41 if IDF_TARGET_ESP32S3
             default 27
         config HUCKDECK_BTN_NURSING_GPIO
             int "Nursing toggle button GPIO"
-            default 16 if IDF_TARGET_ESP32S3
+            default 42 if IDF_TARGET_ESP32S3
             default 14
         config HUCKDECK_BTN_GND_GPIOS
             string "Spare GPIOs held low as extra button grounds"
             default ""
             help
-                Comma-separated GPIO numbers (for example "1,2,13") driven low
+                Comma-separated GPIO numbers (for example "39") driven low
                 at boot so a button's ground lead can plug into them when the
                 board has run out of GND pins. Buttons only: a GPIO cannot
                 sink the current of the display or the LED.
