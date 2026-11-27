@@ -77,11 +77,13 @@ uv run --extra pi python -m huckdeck.dev_mocktest
 ### Display
 
 A single line scrolls continuously (nothing sits still, so the OLED doesn't
-burn in): the latest diaper and today's diaper count, then the latest
-nursing session and today's nursing total — "today" runs 8am to 8am. Event
+burn in): the date and time, the latest diaper and today's diaper count,
+then the latest nursing session and today's nursing total — "today" runs
+8am to 8am. Event
 types are emoji (💧 pee, 💩 poop, 🤱 nursing, 😴 sleep, 🍼 bottle). While a
-nursing or sleep session is being timed, the ticker is replaced by one big
-live timer. A button press shows the event's name, then a check mark and
+nursing or sleep session is being timed, the panel alternates: one big live
+timer holds for 20 seconds, the ticker scrolls through once, and the timer
+comes back. A button press shows the event's name, then a check mark and
 the time once Huckleberry has it. The panel runs at full brightness for a
 minute after a press and dims the rest of the time.
 

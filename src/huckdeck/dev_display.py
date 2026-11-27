@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 import sys
 
-from .feedback.display import DeckState, Overlay, crop_strip, render, render_session, render_strip, session_timers, ticker_items
+from .feedback.display import SESSION_HOLD_SECONDS, WIDTH, DeckState, Overlay, crop_strip, place_strip, render, render_session, render_strip, session_timers, ticker_items
 from .feedback.display_sim import to_png
 
 NOW = 1_800_000_000.0
@@ -66,11 +66,14 @@ SCENES = [
 
 
 def ticker_scenes() -> list[tuple[str, object]]:
-    """Windows into the scrolling ticker, plus the session timers that replace it."""
+    """Windows into the scrolling ticker, plus the session timers that alternate with it."""
     strip = render_strip(ticker_items(IDLE, NOW))
     scenes = [(f"ticker, {offset}px in (strip is {strip.width}px)", crop_strip(strip, offset)) for offset in range(0, strip.width, 230)]
-    scenes.append(("nursing in progress (replaces the ticker)", render_session(session_timers(NURSING, NOW), NOW)))
-    scenes.append(("asleep (replaces the ticker)", render_session(session_timers(ASLEEP, NOW), NOW)))
+    scenes.append(("nursing in progress (alternates with the ticker)", render_session(session_timers(NURSING, NOW), NOW)))
+    scenes.append(("asleep (alternates with the ticker)", render_session(session_timers(ASLEEP, NOW), NOW)))
+    # 7s into the pass that follows the timer's hold, at config.yaml's 34px/s
+    passing = render_strip(ticker_items(ASLEEP, NOW + SESSION_HOLD_SECONDS + 7))
+    scenes.append(("asleep, the ticker passing between timers", place_strip(passing, WIDTH - 7 * 34)))
     return scenes
 
 

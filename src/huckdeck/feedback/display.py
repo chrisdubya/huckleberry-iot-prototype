@@ -3,16 +3,19 @@
 Two layouts, chosen by `display: mode:` in config.yaml:
 
   ticker — one line scrolling continuously (nothing ever sits still, so the
-           OLED doesn't burn in): the latest diaper, the latest nursing
-           session, then today's diaper count and today's nursing total.
+           OLED doesn't burn in): the date and time, then the latest
+           diaper and today's diaper count, then the latest nursing session
+           and today's nursing total.
            "Today" runs from the configured day start (8am). Event types are
            drawn as emoji (💧 pee, 💩 poop, 🤱 nursing, 😴 sleep, 🍼 bottle)
            from the bundled monochrome Noto Emoji font.
   panes  — static panes side by side: time since the last feed and diaper.
 
-While a nursing or sleep session is running, both layouts are replaced by
-one big live timer for it (drifting a few pixels now and then against
-burn-in). A button press shows the event's name straight away, a check mark
+While a nursing or sleep session is running, the panel alternates: one big
+live timer for it (drifting a few pixels now and then against burn-in) holds
+for SESSION_HOLD_SECONDS, then the layout's other info comes by — the ticker
+scrolls through once, or the panes show for SESSION_PANES_SECONDS — and the
+timer returns. A button press shows the event's name straight away, a check mark
 and the time once Huckleberry has it, then back to the layout; "retrying"
 while a send is retried, a cross if it's lost. The panel runs at full
 brightness after a press and dims after `dim_after_seconds` without one.
@@ -53,6 +56,8 @@ TICKER_FONT = 40  # one line, readable from across the room
 SESSION_FONT = 44  # the live timer while a session runs
 SESSION_DRIFT = (0, 1, 2, 1, 0, -1, -2, -1)  # px, one step every SESSION_DRIFT_SECONDS
 SESSION_DRIFT_SECONDS = 20
+SESSION_HOLD_SECONDS = 20.0  # the timer holds this long, then the other info comes by
+SESSION_PANES_SECONDS = 10.0  # panes mode: how long the panes show between timers
 TICKER_GAP_PX = 44  # between items, with a dot in the middle (drawn: the font has no bullet)
 TICKER_DOT_R = 3
 
@@ -254,10 +259,11 @@ def _draw_overlay(draw, overlay: Overlay) -> None:
 def ticker_items(state: DeckState, now: float) -> list[list[tuple[str, int]]]:
     """The ticker's items, each a list of (text, fill) runs: dim labels, bright values.
 
-    Grouped by kind: the diaper group (latest, then today's total), then the
-    nursing group (latest, then today's total).
+    The date and time first, then grouped by kind: the diaper group (latest,
+    then today's total), then the nursing group (latest, then today's total).
     """
-    items: list[list[tuple[str, int]]] = []
+    clock, _, meridiem = _clock(now).partition(" ")
+    items: list[list[tuple[str, int]]] = [[(f"{_date(now)} ", DIM), (clock, BRIGHT), (f" {meridiem}", DIM)]]
     if state.last_diaper_start is not None:
         ago = format_ago(now - state.last_diaper_start)
         icon = DIAPER_EMOJI.get(state.last_diaper_mode, "DIAPER")
@@ -351,6 +357,15 @@ def crop_strip(strip, offset: int):
     return frame
 
 
+def place_strip(strip, x: int):
+    """The strip with its left edge at x, no wrapping: one pass across the frame."""
+    from PIL import Image
+
+    frame = Image.new("L", (WIDTH, HEIGHT), 0)
+    frame.paste(strip, (x, 0))
+    return frame
+
+
 def render(state: DeckState, now: float, overlay: Overlay | None = None):
     """One 256x64 grayscale frame in the panes layout."""
     from PIL import Image, ImageDraw
@@ -366,6 +381,12 @@ def render(state: DeckState, now: float, overlay: Overlay | None = None):
 
 def _clock(now: float) -> str:
     return time.strftime("%I:%M %p", time.localtime(now)).lstrip("0")
+
+
+def _date(now: float) -> str:
+    """Weekday, month and day, e.g. "FRI NOV 27"."""
+    local = time.localtime(now)
+    return f"{time.strftime('%a %b', local).upper()} {local.tm_mday}"
 
 
 class Display:
@@ -392,6 +413,7 @@ class Display:
         self._strip_width = 1
         self._scroll_start = time.time()
         self._scroll_offset = 0.0  # px into the strip at _scroll_start
+        self._session_cycle_start: float | None = None  # when the session timer last took the panel
 
     # -- brightness --------------------------------------------------------
 
@@ -410,15 +432,35 @@ class Display:
         if self._overlay is not None and self._overlay.until is not None and now >= self._overlay.until:
             self._overlay = None
         if self._overlay is not None:
+            self._session_cycle_start = None  # after a press, a running session's timer comes first
             return render(self.state, now, self._overlay)
         timers = session_timers(self.state, now)
         if timers:
-            return render_session(timers, now)  # a running session takes over the whole panel
+            return self._session_frame(timers, now)
+        self._session_cycle_start = None
         if self.mode != "ticker":
             return render(self.state, now)
         return self._ticker_frame(now)
 
-    def _ticker_frame(self, now: float):
+    def _session_frame(self, timers: list[tuple[str, str]], now: float):
+        """A running session: the big timer, with the other info coming by between holds."""
+        if self._session_cycle_start is None:
+            self._session_cycle_start = now
+        showing = now - self._session_cycle_start - SESSION_HOLD_SECONDS  # seconds into the other info
+        if showing >= 0:
+            if self.mode != "ticker":
+                if showing < SESSION_PANES_SECONDS:
+                    return render(self.state, now)
+            else:
+                # one pass: the strip comes in from the right edge and leaves off the left
+                self._update_strip(now)
+                x = WIDTH - int(showing * self.ticker_speed)
+                if x > -self._strip_width:
+                    return place_strip(self._strip, x)
+            self._session_cycle_start = now
+        return render_session(timers, now)
+
+    def _update_strip(self, now: float) -> None:
         items = ticker_items(self.state, now)
         key = tuple(tuple(item) for item in items)
         if key != self._strip_key:
@@ -429,6 +471,9 @@ class Display:
             self._strip = render_strip(items)
             self._strip_key = key
             self._strip_width = self._strip.width
+
+    def _ticker_frame(self, now: float):
+        self._update_strip(now)
         return crop_strip(self._strip, int(self.scroll_offset(now)))
 
     def scroll_offset(self, now: float) -> float:
