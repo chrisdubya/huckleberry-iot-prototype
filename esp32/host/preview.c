@@ -104,14 +104,16 @@ int main(int argc, char **argv)
     gfx_t probe;
     gfx_init(&probe, probe_px, GFX_WIDTH, GFX_HEIGHT);
     display_frame(&probe, NOW); /* builds the strip */
-    for (int offset = 0; offset < 1600 && nscenes < 8; offset += 230) {
+    for (int offset = 0; offset < 1970 && nscenes < 9; offset += 230) {
         /* ticker_speed 34px/s: advance time so the scroll offset is `offset` */
         char *caption = malloc(48);
         snprintf(caption, 48, "ticker, %dpx in", offset);
         capture(caption, NOW + offset / 34.0);
     }
-    reset(); state_nursing(); capture("nursing in progress (replaces the ticker)", NOW);
-    reset(); state_asleep(); capture("asleep (replaces the ticker)", NOW);
+    reset(); state_nursing(); capture("nursing in progress (alternates with the ticker)", NOW);
+    reset(); state_asleep(); capture("asleep (alternates with the ticker)", NOW);
+    /* same session, 7s into the pass that follows the timer's 20s hold */
+    capture("asleep, the ticker passing between timers", NOW + 20 + 7);
 
     display_config_t panes = CONFIG;
     panes.mode = DISPLAY_MODE_PANES;

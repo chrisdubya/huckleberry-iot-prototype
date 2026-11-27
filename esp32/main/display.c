@@ -19,6 +19,8 @@
 #define TICKER_FONT 40   /* one line, readable from across the room */
 #define SESSION_FONT 44  /* the live timer while a session runs */
 #define SESSION_DRIFT_SECONDS 20
+#define SESSION_HOLD_SECONDS 20.0  /* the timer holds this long, then the other info comes by */
+#define SESSION_PANES_SECONDS 10.0 /* panes mode: how long the panes show between timers */
 #define TICKER_GAP_PX 44 /* between items, with a dot in the middle */
 #define TICKER_DOT_R 3
 
@@ -50,6 +52,9 @@ static struct {
     int strip_width;
     double scroll_start;
     double scroll_offset; /* px into the strip at scroll_start */
+    /* when the session timer last took the panel (display.Display._session_frame) */
+    bool has_session_cycle;
+    double session_cycle_start;
 } D;
 
 /* -- helpers ------------------------------------------------------------ */
@@ -154,6 +159,18 @@ static void upper(char *s)
     for (; *s; s++)
         if (*s >= 'a' && *s <= 'z')
             *s -= 32;
+}
+
+/* Weekday, month and day, e.g. "FRI NOV 27". */
+static void date_string(double now, char *out, int n)
+{
+    time_t t = (time_t)now;
+    struct tm tm;
+    localtime_r(&t, &tm);
+    char buf[16];
+    strftime(buf, sizeof(buf), "%a %b", &tm);
+    upper(buf);
+    snprintf(out, n, "%s %d", buf, tm.tm_mday);
 }
 
 /* -- panes layout ------------------------------------------------------- */
@@ -308,6 +325,8 @@ typedef struct {
     int nruns;
 } item_t;
 
+#define TICKER_MAX_ITEMS 5
+
 static void add_run(item_t *item, uint8_t fill, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 static void add_run(item_t *item, uint8_t fill, const char *fmt, ...)
 {
@@ -323,12 +342,23 @@ static void add_run(item_t *item, uint8_t fill, const char *fmt, ...)
         item->nruns--; /* Pillow draws nothing for "", skip it */
 }
 
-/* display.ticker_items: the diaper group (latest, today's total), then the nursing group. */
+/* display.ticker_items: the date and time, the diaper group (latest, today's total), then the nursing group. */
 static int ticker_items(const deck_state_t *s, double now, item_t *items)
 {
     int n = 0;
-    char ago[16], hours[16];
-    memset(items, 0, sizeof(item_t) * 4);
+    char ago[16], hours[16], date[24], clock[16];
+    memset(items, 0, sizeof(item_t) * TICKER_MAX_ITEMS);
+    date_string(now, date, sizeof(date));
+    clock_string(now, clock, sizeof(clock));
+    char *meridiem = strchr(clock, ' '); /* "3:42 PM": bright time, dim AM/PM */
+    if (meridiem)
+        *meridiem++ = 0;
+    {
+        item_t *it = &items[n++];
+        add_run(it, DIM, "%s ", date);
+        add_run(it, BRIGHT, "%s", clock);
+        add_run(it, DIM, " %s", meridiem ? meridiem : "");
+    }
     if (s->has_last_diaper) {
         format_ago(now - s->last_diaper_start, ago, sizeof(ago));
         item_t *it = &items[n++];
@@ -397,9 +427,9 @@ static double scroll_offset(double now)
     return fmod(D.scroll_offset + (now - D.scroll_start) * D.config.ticker_speed, D.strip_width);
 }
 
-static void ticker_frame(gfx_t *g, double now)
+/* Build the items for `now` and refresh the strip bookkeeping if their text changed. */
+static int update_strip(double now, item_t *items)
 {
-    item_t items[4];
     int n = ticker_items(&D.state, now, items);
     char key[256] = "";
     size_t len = 0;
@@ -414,6 +444,13 @@ static void ticker_frame(gfx_t *g, double now)
         D.strip_width = strip_width(items, n);
         snprintf(D.strip_key, sizeof(D.strip_key), "%s", key);
     }
+    return n;
+}
+
+static void ticker_frame(gfx_t *g, double now)
+{
+    item_t items[TICKER_MAX_ITEMS];
+    int n = update_strip(now, items);
     int offset = (int)scroll_offset(now);
     draw_strip_at(g, items, n, -(float)offset);
     if (offset + DISPLAY_WIDTH > D.strip_width)
@@ -469,6 +506,35 @@ static void render_session(gfx_t *g, const timer_t_ *timers, int n, double now)
     }
 }
 
+/* A running session: the big timer, with the other info coming by between holds. */
+static void session_frame(gfx_t *g, const timer_t_ *timers, int n, double now)
+{
+    if (!D.has_session_cycle) {
+        D.has_session_cycle = true;
+        D.session_cycle_start = now;
+    }
+    double showing = now - D.session_cycle_start - SESSION_HOLD_SECONDS; /* seconds into the other info */
+    if (showing >= 0) {
+        if (D.config.mode != DISPLAY_MODE_TICKER) {
+            if (showing < SESSION_PANES_SECONDS) {
+                draw_panes(g, &D.state, now);
+                return;
+            }
+        } else {
+            /* one pass: the strip comes in from the right edge and leaves off the left */
+            item_t items[TICKER_MAX_ITEMS];
+            int nitems = update_strip(now, items);
+            int x = DISPLAY_WIDTH - (int)(showing * D.config.ticker_speed);
+            if (x > -D.strip_width) {
+                draw_strip_at(g, items, nitems, (float)x);
+                return;
+            }
+        }
+        D.session_cycle_start = now;
+    }
+    render_session(g, timers, n, now);
+}
+
 /* -- public ------------------------------------------------------------- */
 
 void display_init(const display_config_t *config, double now)
@@ -507,16 +573,20 @@ void display_frame(gfx_t *g, double now)
     if (D.overlay.active && D.overlay.has_until && now >= D.overlay.until)
         D.overlay.active = false;
     if (D.overlay.active) {
+        D.has_session_cycle = false; /* after a press, a running session's timer comes first */
         draw_overlay(g, &D.overlay);
     } else {
         timer_t_ timers[2];
         int n = session_timers(&D.state, now, timers);
-        if (n)
-            render_session(g, timers, n, now); /* a running session takes over the whole panel */
-        else if (D.config.mode != DISPLAY_MODE_TICKER)
-            draw_panes(g, &D.state, now);
-        else
-            ticker_frame(g, now);
+        if (n) {
+            session_frame(g, timers, n, now);
+        } else {
+            D.has_session_cycle = false;
+            if (D.config.mode != DISPLAY_MODE_TICKER)
+                draw_panes(g, &D.state, now);
+            else
+                ticker_frame(g, now);
+        }
     }
     hd_unlock();
 }
